@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgriSentinel AI - Surveillance & Diagnostic Agricole par IA</title>
+  <meta name="description" content="Plateforme IA de surveillance en temps réel et de diagnostic des maladies agricoles fonctionnant 100% dans le navigateur.">
+  
+  <!-- Typography & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- TensorFlow.js Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="navbar">
+    <div class="brand">
+      <div class="logo-icon"><i class="fa-solid fa-seedling"></i></div>
+      <div class="brand-text">
+        <h1>AGRISENTINEL <span class="accent-text">AI</span></h1>
+        <span class="tagline">Surveillance & Diagnostic Edge-AI • Togo IT Days</span>
+      </div>
+    </div>
+
+    <div class="system-status">
+      <div class="status-badge" id="gpu-status">
+        <span class="pulse-dot green"></span>
+        <span class="status-label">Moteur IA : <strong id="backend-type">WebGL (GPU)</strong></span>
+      </div>
+      <div class="status-badge" id="model-status">
+        <i class="fa-solid fa-brain"></i>
+        <span class="status-label">Modèles : <strong id="models-loaded-text">Chargement...</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Grid -->
+  <main class="dashboard-container">
+
+    <!-- Navigation Tabs -->
+    <div class="tab-navigation">
+      <button class="tab-btn active" id="tab-surveillance-btn" onclick="switchTab('surveillance')">
+        <i class="fa-solid fa-shield-halved"></i>
+        1. Surveillance & Effarouchement (Live)
+      </button>
+      <button class="tab-btn" id="tab-diagnostic-btn" onclick="switchTab('diagnostic')">
+        <i class="fa-solid fa-microscope"></i>
+        2. Diagnostic Santé des Cultures
+      </button>
+    </div>
+
+    <!-- TAB 1: SURVEILLANCE CHAMP -->
+    <section id="tab-surveillance" class="tab-content active">
+      <div class="grid-layout-2col">
+        
+        <!-- Camera Feed & Bounding Box Canvas -->
+        <div class="panel camera-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-video"></i> Flux Caméra Champ en Temps Réel</h3>
+            <div class="camera-controls">
+              <label class="switch-label">
+                <span>Mode Démo (Simulation)</span>
+                <input type="checkbox" id="demo-mode-toggle" onchange="toggleDemoMode()">
+                <span class="slider"></span>
+              </label>
+              <button class="btn btn-sm btn-outline" id="btn-toggle-camera" onclick="toggleCamera()">
+                <i class="fa-solid fa-camera"></i> Démarrer Caméra
+              </button>
+            </div>
+          </div>
+
+          <div class="video-wrapper" id="video-wrapper">
+            <!-- Video & Canvas Layer -->
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="detection-canvas"></canvas>
+
+            <!-- Status Overlay Indicator -->
+            <div class="hud-overlay" id="hud-overlay">
+              <div class="hud-badge normal" id="alert-banner">
+                <i class="fa-solid fa-circle-check" id="alert-icon"></i>
+                <span id="alert-message">Zone Sécurisée — Aucune menace détectée</span>
+              </div>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div class="loading-overlay" id="loading-overlay">
+              <div class="spinner"></div>
+              <p id="loading-text">Initialisation du modèle IA COCO-SSD...</p>
+            </div>
+          </div>
+
+          <!-- Quick Audio Alarm Test Controls -->
+          <div class="audio-control-bar">
+            <span><i class="fa-solid fa-volume-high"></i> Signal sonore d'effarouchement :</span>
+            <button class="btn btn-xs btn-warning" onclick="playScareSound('bird')">
+              <i class="fa-solid fa-dove"></i> Test Effaroucheur Oiseaux
+            </button>
+            <button class="btn btn-xs btn-danger" onclick="playScareSound('person')">
+              <i class="fa-solid fa-triangle-exclamation"></i> Test Sirène Intrus
+            </button>
+            <label class="checkbox-inline">
+              <input type="checkbox" id="auto-sound-toggle" checked> Alerte Sonore Automatique
+            </label>
+          </div>
+        </div>
+
+        <!-- Detection History & Realtime Telemetry -->
+        <div class="panel telemetry-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-radar"></i> Télémétrie & Détections IA</h3>
+            <span class="badge badge-pulse-green" id="fps-badge">-- FPS</span>
+          </div>
+
+          <div class="metrics-row">
+            <div class="metric-card">
+              <div class="metric-icon blue"><i class="fa-solid fa-user-shield"></i></div>
+              <div class="metric-info">
+                <span class="metric-value" id="count-intruders">0</span>
+                <span class="metric-label">Intrus Détectés</span>
+              </div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon yellow"><i class="fa-solid fa-crow"></i></div>
+              <div class="metric-info">
+                <span class="metric-value" id="count-pests">0</span>
+                <span class="metric-label">Nuisibles (Oiseaux/Animaux)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="log-container">
+            <h4><i class="fa-solid fa-list-check"></i> Journal des Événements</h4>
+            <ul class="log-list" id="log-list">
+              <li class="log-item info">
+                <span class="time">[Initialisation]</span>
+                <span>Système prêt. Démarrez la caméra ou le mode démo.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: DIAGNOSTIC SANTÉ DE LA PLANTE -->
+    <section id="tab-diagnostic" class="tab-content">
+      <div class="grid-layout-2col">
+
+        <!-- Image Upload & Capture Area -->
+        <div class="panel upload-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-leaf"></i> Analyse de Feuille Suspecte</h3>
+          </div>
+
+          <div class="drop-zone" id="drop-zone">
+            <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(event)">
+            <div class="drop-zone-content" id="drop-zone-prompt">
+              <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+              <h4>Glissez une image ici ou cliquez pour choisir</h4>
+              <p>Format accepté: JPG, PNG, WEBP (Feuilles de Manioc, Maïs, Tomate, etc.)</p>
+            </div>
+            <img id="preview-image" src="" alt="Aperçu de la feuille" class="preview-img hidden">
+          </div>
+
+          <!-- Sample Quick Test Buttons -->
+          <div class="sample-section">
+            <span class="sample-label">Exemples de test rapide :</span>
+            <div class="sample-buttons">
+              <button class="btn btn-sm btn-sample" onclick="loadSampleImage('cassava_mosaic')">
+                🍃 Mosaïque du Manioc
+              </button>
+              <button class="btn btn-sm btn-sample" onclick="loadSampleImage('healthy_leaf')">
+                🌱 Feuille Saine
+              </button>
+              <button class="btn btn-sm btn-sample" onclick="loadSampleImage('blight_leaf')">
+                🍂 Brûlure de la Feuille
+              </button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-block" id="btn-analyze" onclick="analyzeLeaf()" disabled>
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Lancer le Diagnostic IA
+          </button>
+        </div>
+
+        <!-- Result & Treatment Recommendation Panel -->
+        <div class="panel result-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-square-poll-vertical"></i> Rapport de Diagnostic & Traitement</h3>
+          </div>
+
+          <div id="diagnostic-empty" class="empty-state">
+            <i class="fa-solid fa-stethoscope"></i>
+            <p>Veuillez charger une image et cliquer sur "Lancer le Diagnostic IA".</p>
+          </div>
+
+          <div id="diagnostic-result" class="diagnostic-result hidden">
+            <div class="diagnosis-header-card" id="diagnosis-header-card">
+              <div class="disease-badge" id="disease-name">Diagnostic en cours...</div>
+              <div class="confidence-score">Confiance : <strong id="disease-confidence">0%</strong></div>
+            </div>
+
+            <!-- Top Predictions Breakdown -->
+            <div class="prediction-bars" id="prediction-bars">
+              <!-- Dynamically populated -->
+            </div>
+
+            <!-- Agronomic Treatment Card -->
+            <div class="treatment-card">
+              <h4><i class="fa-solid fa-vial-circle-check"></i> Recommandation Agrotechnique</h4>
+              <p id="treatment-description">Analyse en cours...</p>
+              <div class="action-steps" id="action-steps">
+                <!-- Action steps populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>AgriSentinel AI — Développé pour le Hackathon Togo IT Days • 100% TensorFlow.js Client-Side (Zéro Serveur / Zéro Python)</p>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Environnement virtuel Python
+venv/
+env/
+ENV/
+
+# Byte-compiled / cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Fichiers système & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
