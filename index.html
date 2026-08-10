@@ -2,20 +2,27 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AgroSentinel AI - Surveillance & Diagnostic Agricole par IA</title>
-  <meta name="description" content="Plateforme IA de surveillance en temps réel et de diagnostic des maladies agricoles fonctionnant 100% dans le navigateur.">
-  
-  <!-- Typography & Icons -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <!-- TensorFlow.js Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+  <meta name="description" content="Surveillance Edge-AI des cultures et diagnostic agronomique assisté, fonctionnant hors ligne dans le navigateur.">
+
+  <!-- PWA : installable sur smartphone et utilisable sans réseau -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#090d16">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgroSentinel">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <!-- Typographie & icônes : embarquées localement, aucune requête CDN -->
+  <link rel="stylesheet" href="vendor/fonts/fonts.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+
+  <!-- Bibliothèques TensorFlow.js locales (defer : l'ordre reste garanti) -->
+  <script defer src="vendor/tf.min.js"></script>
+  <script defer src="vendor/coco-ssd.min.js"></script>
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -34,11 +41,15 @@
     <div class="system-status">
       <div class="status-badge" id="gpu-status">
         <span class="pulse-dot green"></span>
-        <span class="status-label">Moteur IA : <strong id="backend-type">WebGL (GPU)</strong></span>
+        <span class="status-label">Moteur IA : <strong id="backend-type">Initialisation…</strong></span>
       </div>
       <div class="status-badge" id="model-status">
         <i class="fa-solid fa-brain"></i>
         <span class="status-label">Modèles : <strong id="models-loaded-text">Chargement...</strong></span>
+      </div>
+      <div class="status-badge" id="offline-status" title="Disponibilité hors ligne">
+        <i class="fa-solid fa-cloud-arrow-down" id="offline-icon"></i>
+        <span class="status-label"><strong id="offline-text">Cache…</strong></span>
       </div>
     </div>
   </header>
@@ -48,20 +59,20 @@
 
     <!-- Navigation Tabs -->
     <div class="tab-navigation">
-      <button class="tab-btn active" id="tab-surveillance-btn" onclick="switchTab('surveillance')">
+      <button class="tab-btn active" id="tab-surveillance-btn" type="button">
         <i class="fa-solid fa-shield-halved"></i>
-        1. Surveillance & Effarouchement (Live)
+        <span>1.&nbsp;Surveillance<span class="tab-long"> &amp; Effarouchement (Live)</span></span>
       </button>
-      <button class="tab-btn" id="tab-diagnostic-btn" onclick="switchTab('diagnostic')">
+      <button class="tab-btn" id="tab-diagnostic-btn" type="button">
         <i class="fa-solid fa-microscope"></i>
-        2. Diagnostic Santé des Cultures
+        <span>2.&nbsp;Diagnostic<span class="tab-long"> Assisté des Cultures</span></span>
       </button>
     </div>
 
     <!-- TAB 1: SURVEILLANCE CHAMP -->
     <section id="tab-surveillance" class="tab-content active">
       <div class="grid-layout-2col">
-        
+
         <!-- Camera Feed & Bounding Box Canvas -->
         <div class="panel camera-panel">
           <div class="panel-header">
@@ -69,11 +80,16 @@
             <div class="camera-controls">
               <label class="switch-label">
                 <span>Mode Démo (Simulation)</span>
-                <input type="checkbox" id="demo-mode-toggle" onchange="toggleDemoMode()">
+                <input type="checkbox" id="demo-mode-toggle">
                 <span class="slider"></span>
               </label>
-              <button class="btn btn-sm btn-outline" id="btn-toggle-camera" onclick="toggleCamera()">
+              <button class="btn btn-sm btn-outline" id="btn-toggle-camera" type="button">
                 <i class="fa-solid fa-camera"></i> Démarrer Caméra
+              </button>
+              <button class="btn btn-sm btn-outline btn-icon hidden" id="btn-flip-camera"
+                      type="button" title="Basculer caméra avant / arrière"
+                      aria-label="Basculer caméra avant / arrière">
+                <i class="fa-solid fa-camera-rotate"></i>
               </button>
             </div>
           </div>
@@ -94,17 +110,17 @@
             <!-- Loading Spinner -->
             <div class="loading-overlay" id="loading-overlay">
               <div class="spinner"></div>
-              <p id="loading-text">Initialisation du modèle IA COCO-SSD...</p>
+              <p id="loading-text">Initialisation du moteur TensorFlow.js…</p>
             </div>
           </div>
 
           <!-- Quick Audio Alarm Test Controls -->
           <div class="audio-control-bar">
             <span><i class="fa-solid fa-volume-high"></i> Signal sonore d'effarouchement :</span>
-            <button class="btn btn-xs btn-warning" onclick="playScareSound('bird')">
+            <button class="btn btn-xs btn-warning" type="button" data-scare="bird">
               <i class="fa-solid fa-dove"></i> Test Effaroucheur Oiseaux
             </button>
-            <button class="btn btn-xs btn-danger" onclick="playScareSound('person')">
+            <button class="btn btn-xs btn-danger" type="button" data-scare="person">
               <i class="fa-solid fa-triangle-exclamation"></i> Test Sirène Intrus
             </button>
             <label class="checkbox-inline">
@@ -116,7 +132,7 @@
         <!-- Detection History & Realtime Telemetry -->
         <div class="panel telemetry-panel">
           <div class="panel-header">
-            <h3><i class="fa-solid fa-radar"></i> Télémétrie & Détections IA</h3>
+            <h3><i class="fa-solid fa-satellite-dish"></i> Télémétrie & Détections IA</h3>
             <span class="badge badge-pulse-green" id="fps-badge">-- FPS</span>
           </div>
 
@@ -151,77 +167,107 @@
       </div>
     </section>
 
-    <!-- TAB 2: DIAGNOSTIC SANTÉ DE LA PLANTE -->
+    <!-- TAB 2: DIAGNOSTIC ASSISTÉ -->
     <section id="tab-diagnostic" class="tab-content">
       <div class="grid-layout-2col">
 
-        <!-- Image Upload & Capture Area -->
-        <div class="panel upload-panel">
+        <!-- Parcours guidé en 3 étapes -->
+        <div class="panel diagnostic-panel">
           <div class="panel-header">
-            <h3><i class="fa-solid fa-leaf"></i> Analyse de Feuille Suspecte</h3>
+            <h3><i class="fa-solid fa-leaf"></i> Parcours de Diagnostic Assisté</h3>
+            <span class="badge badge-step" id="diag-step-badge">Étape 1 / 3</span>
           </div>
 
-          <div class="drop-zone" id="drop-zone">
-            <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(event)">
-            <div class="drop-zone-content" id="drop-zone-prompt">
-              <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-              <h4>Glissez une image ici ou cliquez pour choisir</h4>
-              <p>Format accepté: JPG, PNG, WEBP (Feuilles de Manioc, Maïs, Tomate, etc.)</p>
+          <!-- ÉTAPE 1 : culture -->
+          <div class="diag-step">
+            <div class="step-title">
+              <span class="step-num">1</span> Sélectionnez votre culture
             </div>
-            <img id="preview-image" src="" alt="Aperçu de la feuille" class="preview-img hidden">
-          </div>
-
-          <!-- Sample Quick Test Buttons -->
-          <div class="sample-section">
-            <span class="sample-label">Exemples de test rapide :</span>
-            <div class="sample-buttons">
-              <button class="btn btn-sm btn-sample" onclick="loadSampleImage('cassava_mosaic')">
-                🍃 Mosaïque du Manioc
-              </button>
-              <button class="btn btn-sm btn-sample" onclick="loadSampleImage('healthy_leaf')">
-                🌱 Feuille Saine
-              </button>
-              <button class="btn btn-sm btn-sample" onclick="loadSampleImage('blight_leaf')">
-                🍂 Brûlure de la Feuille
-              </button>
+            <div class="crop-selector" id="crop-selector">
+              <!-- Généré depuis config.js -->
             </div>
           </div>
 
-          <button class="btn btn-primary btn-block" id="btn-analyze" onclick="analyzeLeaf()" disabled>
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Lancer le Diagnostic IA
-          </button>
+          <!-- ÉTAPE 2 : photo -->
+          <div class="diag-step">
+            <div class="step-title">
+              <span class="step-num">2</span> Photo de la feuille
+              <span class="optional">— optionnel</span>
+            </div>
+
+            <div class="drop-zone" id="drop-zone">
+              <input type="file" id="file-input" accept="image/*">
+              <div class="drop-zone-content" id="drop-zone-prompt">
+                <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                <h4>Glissez une image ici ou cliquez pour choisir</h4>
+                <p>JPG, PNG ou WEBP</p>
+              </div>
+              <img id="preview-image" src="" alt="Aperçu de la feuille analysée" class="preview-img hidden">
+            </div>
+
+            <div class="quality-check hidden" id="quality-check">
+              <i id="quality-icon" class="fa-solid fa-circle-check"></i>
+              <div class="quality-text">
+                <strong id="quality-title"></strong>
+                <span id="quality-detail"></span>
+              </div>
+            </div>
+
+            <p class="disclaimer">
+              <i class="fa-solid fa-circle-info"></i>
+              <span>
+                <strong>Contrôle de cadrage uniquement.</strong>
+                MobileNet (ImageNet) vérifie que la photo contient bien un végétal.
+                Il n'établit pas le diagnostic : ImageNet ne contient aucune classe
+                de maladie phytosanitaire.
+              </span>
+            </p>
+          </div>
+
+          <!-- ÉTAPE 3 : symptôme -->
+          <div class="diag-step">
+            <div class="step-title">
+              <span class="step-num">3</span> Quel symptôme observez-vous ?
+            </div>
+            <div class="symptom-list" id="symptom-list">
+              <p class="symptom-placeholder">Choisissez d'abord une culture à l'étape 1.</p>
+            </div>
+          </div>
         </div>
 
-        <!-- Result & Treatment Recommendation Panel -->
+        <!-- Fiche agronomique -->
         <div class="panel result-panel">
           <div class="panel-header">
-            <h3><i class="fa-solid fa-square-poll-vertical"></i> Rapport de Diagnostic & Traitement</h3>
+            <h3><i class="fa-solid fa-square-poll-vertical"></i> Fiche Agronomique & Traitement</h3>
           </div>
 
           <div id="diagnostic-empty" class="empty-state">
             <i class="fa-solid fa-stethoscope"></i>
-            <p>Veuillez charger une image et cliquer sur "Lancer le Diagnostic IA".</p>
+            <p>Sélectionnez une culture puis le symptôme observé pour afficher la fiche de traitement.</p>
           </div>
 
           <div id="diagnostic-result" class="diagnostic-result hidden">
             <div class="diagnosis-header-card" id="diagnosis-header-card">
-              <div class="disease-badge" id="disease-name">Diagnostic en cours...</div>
-              <div class="confidence-score">Confiance : <strong id="disease-confidence">0%</strong></div>
-            </div>
-
-            <!-- Top Predictions Breakdown -->
-            <div class="prediction-bars" id="prediction-bars">
-              <!-- Dynamically populated -->
-            </div>
-
-            <!-- Agronomic Treatment Card -->
-            <div class="treatment-card">
-              <h4><i class="fa-solid fa-vial-circle-check"></i> Recommandation Agrotechnique</h4>
-              <p id="treatment-description">Analyse en cours...</p>
-              <div class="action-steps" id="action-steps">
-                <!-- Action steps populated here -->
+              <div class="diagnosis-identity">
+                <div class="disease-badge" id="disease-name"></div>
+                <div class="disease-crop" id="disease-crop"></div>
               </div>
+              <div class="severity-badge" id="disease-severity"></div>
             </div>
+
+            <div class="treatment-card">
+              <h4><i class="fa-solid fa-microscope"></i> Description agronomique</h4>
+              <p id="treatment-description"></p>
+            </div>
+
+            <div class="treatment-card">
+              <h4><i class="fa-solid fa-vial-circle-check"></i> <span id="remedy-title"></span></h4>
+              <div class="action-steps" id="action-steps"></div>
+            </div>
+
+            <button class="btn btn-outline btn-block" id="btn-reset-diag" type="button">
+              <i class="fa-solid fa-rotate-left"></i> Nouveau diagnostic
+            </button>
           </div>
         </div>
 
@@ -232,7 +278,7 @@
 
   <!-- Footer -->
   <footer class="footer">
-    <p>AgroSentinel AI — Développé pour le Hackathon Togo IT Days • 100% TensorFlow.js Client-Side (Zéro Serveur / Zéro Python)</p>
+    <p>AgroSentinel AI — Développé pour le Hackathon Togo IT Days • TensorFlow.js 100% client-side, aucune image envoyée à un serveur</p>
   </footer>
 
   <script type="module" src="js/app.js"></script>

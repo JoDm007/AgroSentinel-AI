@@ -14,14 +14,19 @@ export function addLogItem(type, message) {
   if (!logList) return;
 
   const li = document.createElement("li");
-  const timeStr = new Date().toLocaleTimeString();
-
   li.className = `log-item ${type}`;
-  li.innerHTML = `<span class="time">[${timeStr}]</span> <span>${message}</span>`;
 
+  const timeSpan = document.createElement("span");
+  timeSpan.className = "time";
+  timeSpan.textContent = `[${new Date().toLocaleTimeString()}]`;
+
+  const textSpan = document.createElement("span");
+  textSpan.textContent = message;
+
+  li.append(timeSpan, textSpan);
   logList.insertBefore(li, logList.firstChild);
 
-  if (logList.children.length > CONFIG.MAX_LOGS) {
+  while (logList.children.length > CONFIG.MAX_LOGS) {
     logList.removeChild(logList.lastChild);
   }
 }
@@ -36,6 +41,14 @@ export function calculateFps() {
     frameCount = 0;
     lastFrameTime = now;
   }
+}
+
+/** Remet le compteur à zéro quand la boucle de détection s'arrête. */
+export function resetFps() {
+  frameCount = 0;
+  lastFrameTime = performance.now();
+  const badge = document.getElementById("fps-badge");
+  if (badge) badge.textContent = "-- FPS";
 }
 
 export function incrementIntruders() {

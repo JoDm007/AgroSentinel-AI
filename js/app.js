@@ -1,218 +1,380 @@
 /**
  * AgroSentinel AI - Contrôleur Principal Application (ES Module)
+ *
+ * Responsabilités :
+ *   - amorçage des modèles TensorFlow.js
+ *   - navigation entre les onglets
+ *   - machine à états de la surveillance (caméra ⇄ mode démo)
+ *
+ * La logique de l'onglet 2 vit dans js/views/diagnostic.js.
  */
 
-import { loadObjectDetectorModel, startDetectionLoop, stopDetectionLoop } from './models/objectDetector.js';
-import { loadLeafClassifierModel, classifyLeafImage } from './models/leafClassifier.js';
-import { playScareSound } from './utils/audioSynth.js';
-import { addLogItem } from './utils/telemetry.js';
+import {
+  loadObjectDetectorModel,
+  startDetectionLoop,
+  stopDetectionLoop,
+  resetOverlay,
+} from './models/objectDetector.js';
+import { loadLeafClassifierModel } from './models/leafClassifier.js';
+import { playScareSound, primeAudioEngine } from './utils/audioSynth.js';
+import { addLogItem, resetFps } from './utils/telemetry.js';
+import { initDiagnosticView } from './views/diagnostic.js';
 
+// La caméra et le mode démo sont mutuellement exclusifs : deux drapeaux
+// distincts, jamais détournés l'un pour l'autre.
 let isCameraRunning = false;
 let isDemoMode = false;
+
+/** "environment" = caméra arrière (usage terrain), "user" = caméra frontale. */
+let cameraFacingMode = "environment";
+let hasMultipleCameras = false;
+
 let webcamElement = null;
 let canvasElement = null;
-let selectedImageElement = null;
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   webcamElement = document.getElementById("webcam");
   canvasElement = document.getElementById("detection-canvas");
-  selectedImageElement = document.getElementById("preview-image");
 
-  // Expose UI Functions globally for HTML inline onclick handlers
-  window.switchTab = switchTab;
-  window.toggleCamera = toggleCamera;
-  window.toggleDemoMode = toggleDemoMode;
-  window.playScareSound = playScareSound;
-  window.handleFileSelect = handleFileSelect;
-  window.loadSampleImage = loadSampleImage;
-  window.analyzeLeaf = analyzeLeaf;
+  bindEventListeners();
+  initDiagnosticView();
+  syncSurveillanceUI();
+
+  registerServiceWorker();
+  bootstrapModels();
+});
+
+// ─── Mode hors ligne (PWA) ───────────────────────────────────────────────────
+
+/** Doit rester aligné sur RUNTIME_CACHE dans sw.js. */
+const RUNTIME_CACHE = "agrosentinel-v1-runtime";
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    setOfflineStatus("unavailable", "Non supporté");
+    return;
+  }
+
+  try {
+    await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+  } catch (err) {
+    console.warn("Service worker non enregistré :", err);
+    setOfflineStatus("unavailable", "Indisponible");
+  }
+}
+
+/**
+ * Met explicitement en cache les poids des modèles.
+ *
+ * Au tout premier chargement, le service worker ne contrôle pas encore la
+ * page : les requêtes de poids lui échappent et ne seraient pas mises en
+ * cache. On pilote donc le cache depuis la page, ce qui rend l'état
+ * hors-ligne déterministe au lieu de dépendre du cycle de vie du SW.
+ */
+async function warmOfflineCache() {
+  if (!("caches" in window)) {
+    setOfflineStatus("unavailable", "Non supporté");
+    return;
+  }
+
+  try {
+    setOfflineStatus("pending", "Mise en cache…");
+    const cache = await caches.open(RUNTIME_CACHE);
+
+    const manifests = ["./models/coco-ssd/model.json", "./models/mobilenet/model.json"];
+    const urls = [];
+
+    for (const manifestUrl of manifests) {
+      urls.push(manifestUrl);
+      const manifest = await (await fetch(manifestUrl)).json();
+      const dir = manifestUrl.slice(0, manifestUrl.lastIndexOf("/") + 1);
+      for (const group of manifest.weightsManifest) {
+        for (const path of group.paths) urls.push(dir + path);
+      }
+    }
+
+    let cached = 0;
+    for (const url of urls) {
+      if (await cache.match(url)) { cached++; continue; }
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          await cache.put(url, response);
+          cached++;
+        }
+      } catch { /* fichier manquant : ignoré, le compte le reflètera */ }
+    }
+
+    if (cached === urls.length) {
+      setOfflineStatus("ready", "Hors ligne prêt");
+      addLogItem("info", `Mode hors ligne prêt (${cached} fichiers en cache).`);
+    } else {
+      setOfflineStatus("pending", `${cached}/${urls.length}`);
+    }
+  } catch (err) {
+    console.warn("Mise en cache hors ligne incomplète :", err);
+    setOfflineStatus("unavailable", "Incomplet");
+  }
+}
+
+function setOfflineStatus(state, label) {
+  const badge = document.getElementById("offline-status");
+  const icon = document.getElementById("offline-icon");
+  const text = document.getElementById("offline-text");
+  if (!badge) return;
+
+  const icons = {
+    ready: "fa-solid fa-circle-check",
+    pending: "fa-solid fa-cloud-arrow-down",
+    unavailable: "fa-solid fa-circle-minus",
+  };
+
+  badge.className = `status-badge offline-${state}`;
+  if (icon) icon.className = icons[state] ?? icons.pending;
+  if (text) text.textContent = label;
+}
+
+// ─── Amorçage des modèles ────────────────────────────────────────────────────
+
+async function bootstrapModels() {
+  const loadingText = document.getElementById("loading-text");
+  const statusEl = document.getElementById("models-loaded-text");
 
   try {
     await tf.ready();
     const backendEl = document.getElementById("backend-type");
     if (backendEl) backendEl.textContent = tf.getBackend().toUpperCase();
 
-    // Load AI models in parallel
+    if (loadingText) loadingText.textContent = "Chargement des modèles IA embarqués…";
+
     await Promise.all([
       loadObjectDetectorModel(),
-      loadLeafClassifierModel()
+      loadLeafClassifierModel(),
     ]);
 
-    const statusEl = document.getElementById("models-loaded-text");
     if (statusEl) {
       statusEl.textContent = "Prêts (COCO-SSD & MobileNet)";
       statusEl.style.color = "#34d399";
     }
 
-    const loader = document.getElementById("loading-overlay");
-    if (loader) loader.classList.add("hidden");
-
+    document.getElementById("loading-overlay")?.classList.add("hidden");
     addLogItem("info", "Modèles IA chargés avec succès.");
+
+    await detectAvailableCameras();
+    await warmOfflineCache();
   } catch (err) {
     console.error("Erreur d'initialisation IA:", err);
+
+    if (statusEl) {
+      statusEl.textContent = "Échec du chargement";
+      statusEl.style.color = "#f87171";
+    }
+
+    // L'overlay reste visible mais devient explicite au lieu de tourner
+    // indéfiniment sur "Initialisation…".
+    const spinner = document.querySelector("#loading-overlay .spinner");
+    if (spinner) spinner.classList.add("hidden");
+    if (loadingText) {
+      loadingText.innerHTML =
+        `<strong>Modèles IA indisponibles.</strong><br>` +
+        `Rechargez la page. Le diagnostic assisté reste utilisable.`;
+    }
+
     addLogItem("danger", "Échec d'initialisation des modèles TensorFlow.js.");
   }
-});
+}
+
+/** Détermine s'il existe plusieurs caméras (smartphone : avant + arrière). */
+async function detectAvailableCameras() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    hasMultipleCameras = devices.filter(d => d.kind === "videoinput").length > 1;
+  } catch {
+    hasMultipleCameras = false;
+  }
+  syncSurveillanceUI();
+}
+
+// ─── Câblage des évènements (aucun onclick inline) ───────────────────────────
+
+function bindEventListeners() {
+  document.getElementById("tab-surveillance-btn")
+    ?.addEventListener("click", () => switchTab("surveillance"));
+  document.getElementById("tab-diagnostic-btn")
+    ?.addEventListener("click", () => switchTab("diagnostic"));
+
+  document.getElementById("btn-toggle-camera")
+    ?.addEventListener("click", toggleCamera);
+  document.getElementById("btn-flip-camera")
+    ?.addEventListener("click", flipCamera);
+  document.getElementById("demo-mode-toggle")
+    ?.addEventListener("change", onDemoToggleChanged);
+
+  document.querySelectorAll("[data-scare]").forEach(btn => {
+    btn.addEventListener("click", () => playScareSound(btn.dataset.scare));
+  });
+
+  // Débloque le moteur audio dès la première interaction, pour que les
+  // alertes automatiques ne soient pas muettes.
+  document.addEventListener("pointerdown", primeAudioEngine, { once: true });
+}
+
+// ─── Navigation ──────────────────────────────────────────────────────────────
 
 function switchTab(tabName) {
   document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(content => content.classList.remove("active"));
 
-  if (tabName === 'surveillance') {
-    document.getElementById("tab-surveillance-btn").classList.add("active");
-    document.getElementById("tab-surveillance").classList.add("active");
-  } else {
-    document.getElementById("tab-diagnostic-btn").classList.add("active");
-    document.getElementById("tab-diagnostic").classList.add("active");
-  }
+  document.getElementById(`tab-${tabName}-btn`)?.classList.add("active");
+  document.getElementById(`tab-${tabName}`)?.classList.add("active");
 }
 
-async function toggleCamera() {
-  const btn = document.getElementById("btn-toggle-camera");
+// ─── Surveillance : caméra ───────────────────────────────────────────────────
 
+async function toggleCamera() {
   if (isCameraRunning) {
     stopCamera();
-    btn.innerHTML = `<i class="fa-solid fa-camera"></i> Démarrer Caméra`;
-    btn.classList.remove("btn-danger");
-    btn.classList.add("btn-outline");
-  } else {
-    const success = await startCamera();
-    if (success) {
-      btn.innerHTML = `<i class="fa-solid fa-stop"></i> Arrêter Caméra`;
-      btn.classList.remove("btn-outline");
-      btn.classList.add("btn-danger");
-    }
+    return;
   }
+  await startCamera();
 }
 
 async function startCamera() {
-  try {
-    if (isDemoMode) {
-      document.getElementById("demo-mode-toggle").checked = false;
-      isDemoMode = false;
-    }
+  // La démo doit être coupée proprement AVANT de lancer une seconde boucle.
+  stopDemoMode({ silent: true });
 
+  if (!navigator.mediaDevices?.getUserMedia) {
+    // Cas typique : page servie en http:// depuis un smartphone. Le
+    // navigateur n'expose l'API caméra que dans un contexte sécurisé.
+    const insecure = !window.isSecureContext;
+    addLogItem("danger", insecure
+      ? "Caméra bloquée : la page doit être servie en HTTPS (ou depuis localhost)."
+      : "API caméra indisponible sur ce navigateur.");
+    startDemoMode();
+    return false;
+  }
+
+  try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "environment" },
-      audio: false
+      video: {
+        width: { ideal: 640 },
+        height: { ideal: 360 },
+        facingMode: cameraFacingMode,
+      },
+      audio: false,
     });
 
     webcamElement.srcObject = stream;
+    await webcamElement.play();
 
-    return new Promise((resolve) => {
-      webcamElement.onloadedmetadata = () => {
-        webcamElement.play();
-        isCameraRunning = true;
-        startDetectionLoop(webcamElement, canvasElement, () => isDemoMode);
-        addLogItem("info", "Caméra en direct activée.");
-        resolve(true);
-      };
-    });
+    isCameraRunning = true;
+    startDetectionLoop(webcamElement, canvasElement, () => isDemoMode);
+    addLogItem("info", cameraFacingMode === "user"
+      ? "Caméra frontale activée."
+      : "Caméra arrière activée.");
+
+    // Les libellés des caméras ne sont exposés qu'après autorisation.
+    await detectAvailableCameras();
+    syncSurveillanceUI();
+    return true;
   } catch (err) {
-    console.warn("Webcam indisponible, passage au mode démo:", err);
-    addLogItem("warning", "Webcam non détectée. Activation du Mode Démo.");
-    document.getElementById("demo-mode-toggle").checked = true;
-    toggleDemoMode();
+    console.warn("Webcam indisponible, bascule en mode démo :", err);
+    const denied = err?.name === "NotAllowedError";
+    addLogItem("warning", denied
+      ? "Accès caméra refusé. Activation du Mode Démo."
+      : "Webcam non détectée. Activation du Mode Démo.");
+    startDemoMode();
     return false;
   }
 }
 
-function stopCamera() {
-  isCameraRunning = false;
-  if (webcamElement && webcamElement.srcObject) {
+/** Bascule entre caméra avant et arrière (utile en démo sur smartphone). */
+async function flipCamera() {
+  cameraFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+
+  if (!isCameraRunning) {
+    syncSurveillanceUI();
+    return;
+  }
+
+  stopDetectionLoop();
+  if (webcamElement?.srcObject) {
     webcamElement.srcObject.getTracks().forEach(track => track.stop());
     webcamElement.srcObject = null;
   }
+  isCameraRunning = false;
+
+  await startCamera();
+}
+
+function stopCamera() {
+  isCameraRunning = false;
+
+  if (webcamElement?.srcObject) {
+    webcamElement.srcObject.getTracks().forEach(track => track.stop());
+    webcamElement.srcObject = null;
+  }
+
   stopDetectionLoop();
+  resetOverlay(canvasElement);
+  resetFps();
+  addLogItem("info", "Caméra arrêtée.");
+  syncSurveillanceUI();
 }
 
-function toggleDemoMode() {
+// ─── Surveillance : mode démo ────────────────────────────────────────────────
+
+function onDemoToggleChanged(event) {
+  if (event.target.checked) startDemoMode();
+  else stopDemoMode();
+}
+
+function startDemoMode() {
+  if (isCameraRunning) stopCamera();
+
+  isDemoMode = true;
+  startDetectionLoop(webcamElement, canvasElement, () => isDemoMode);
+  addLogItem("info", "Mode Démo activé (simulation de menace).");
+  syncSurveillanceUI();
+}
+
+function stopDemoMode({ silent = false } = {}) {
+  if (!isDemoMode) return;
+
+  isDemoMode = false;
+  stopDetectionLoop();
+  resetOverlay(canvasElement);
+  resetFps();
+  if (!silent) addLogItem("info", "Mode Démo désactivé.");
+  syncSurveillanceUI();
+}
+
+// ─── Synchronisation de l'interface ──────────────────────────────────────────
+
+/** Source de vérité unique de l'UI de surveillance. */
+function syncSurveillanceUI() {
+  const btn = document.getElementById("btn-toggle-camera");
+  const flip = document.getElementById("btn-flip-camera");
   const toggle = document.getElementById("demo-mode-toggle");
-  isDemoMode = toggle.checked;
 
-  if (isDemoMode) {
-    if (isCameraRunning) stopCamera();
-    isCameraRunning = true;
-    startDetectionLoop(webcamElement, canvasElement, () => isDemoMode);
-    addLogItem("info", "Mode Démo activé (Simulation de menace).");
-  } else {
-    stopCamera();
-    addLogItem("info", "Mode Démo désactivé.");
-  }
-}
+  if (toggle) toggle.checked = isDemoMode;
 
-function handleFileSelect(event) {
-  const file = event.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      displayPreview(e.target.result);
-    };
-    reader.readAsDataURL(file);
-  }
-}
-
-function displayPreview(src) {
-  const prompt = document.getElementById("drop-zone-prompt");
-  const img = document.getElementById("preview-image");
-  const btnAnalyze = document.getElementById("btn-analyze");
-
-  img.src = src;
-  img.classList.remove("hidden");
-  prompt.classList.add("hidden");
-  btnAnalyze.disabled = false;
-}
-
-function loadSampleImage(diseaseType) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 400;
-  canvas.height = 300;
-  const ctx = canvas.getContext("2d");
-
-  if (diseaseType === "cassava_mosaic") {
-    ctx.fillStyle = "#2d5a27";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#eab308";
-    for (let i = 0; i < 35; i++) {
-      ctx.beginPath();
-      ctx.arc(Math.random() * 380 + 10, Math.random() * 280 + 10, Math.random() * 25 + 10, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (diseaseType === "blight_leaf") {
-    ctx.fillStyle = "#3f6212";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#78350f";
-    for (let i = 0; i < 25; i++) {
-      ctx.beginPath();
-      ctx.ellipse(Math.random() * 360 + 20, Math.random() * 260 + 20, 30, 15, Math.random(), 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else {
-    ctx.fillStyle = "#16a34a";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#22c55e";
-    ctx.beginPath();
-    ctx.arc(200, 150, 80, 0, Math.PI * 2);
-    ctx.fill();
+  if (btn) {
+    btn.disabled = isDemoMode;
+    btn.innerHTML = isCameraRunning
+      ? `<i class="fa-solid fa-stop"></i> Arrêter Caméra`
+      : `<i class="fa-solid fa-camera"></i> Démarrer Caméra`;
+    btn.classList.toggle("btn-danger", isCameraRunning);
+    btn.classList.toggle("btn-outline", !isCameraRunning);
   }
 
-  const dataUrl = canvas.toDataURL("image/jpeg");
-  displayPreview(dataUrl);
-  selectedImageElement.dataset.sampleType = diseaseType;
-}
-
-async function analyzeLeaf() {
-  const btnAnalyze = document.getElementById("btn-analyze");
-  btnAnalyze.disabled = true;
-  btnAnalyze.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyse IA en cours...`;
-
-  try {
-    await classifyLeafImage(selectedImageElement);
-  } catch (err) {
-    console.error(err);
-    alert("Erreur lors de l'analyse.");
-  } finally {
-    btnAnalyze.disabled = false;
-    btnAnalyze.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Lancer le Diagnostic IA`;
+  // Bascule avant/arrière : utile uniquement sur un appareil multi-caméras.
+  if (flip) {
+    flip.classList.toggle("hidden", !hasMultipleCameras || isDemoMode);
+    flip.title = cameraFacingMode === "environment"
+      ? "Passer à la caméra frontale"
+      : "Passer à la caméra arrière";
   }
+  // Volontairement pas d'effet miroir sur la vidéo frontale : le canvas
+  // de détection ne serait plus aligné avec les bounding boxes.
 }

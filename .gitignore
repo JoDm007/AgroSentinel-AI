@@ -1,15 +1,19 @@
-# Environnement virtuel Python
-venv/
-env/
-ENV/
+# Dépendances (si un bundler est ajouté en v2)
+node_modules/
+dist/
+build/
 
-# Byte-compiled / cache Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Modèles TensorFlow.js entraînés localement (poids volumineux)
+# À décommenter si les poids sont hébergés hors dépôt.
+# js/models/weights/
 
 # Fichiers système & IDE
 .DS_Store
 Thumbs.db
+desktop.ini
 .vscode/
 .idea/
+
+# Logs & temporaires
+*.log
+.cache/
