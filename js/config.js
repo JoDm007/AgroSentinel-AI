@@ -1,5 +1,5 @@
 /**
- * AgriSentinel AI - Configuration & Base de Connaissances Agronomique
+ * AgroSentinel AI - Configuration & Base de Connaissances Agronomique
  */
 
 export const CONFIG = {

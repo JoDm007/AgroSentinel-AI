@@ -1,5 +1,5 @@
 /**
- * AgriSentinel AI - Contrôleur Principal Application (ES Module)
+ * AgroSentinel AI - Contrôleur Principal Application (ES Module)
  */
 
 import { loadObjectDetectorModel, startDetectionLoop, stopDetectionLoop } from './models/objectDetector.js';

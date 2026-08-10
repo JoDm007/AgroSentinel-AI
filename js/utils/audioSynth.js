@@ -1,5 +1,5 @@
 /**
- * AgriSentinel AI - Synthétiseur Audio d'Alarmes (Web Audio API)
+ * AgroSentinel AI - Synthétiseur Audio d'Alarmes (Web Audio API)
  */
 
 let audioCtx = null;

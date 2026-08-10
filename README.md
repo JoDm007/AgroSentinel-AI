@@ -1,4 +1,4 @@
-# 🌾 AgriSentinel AI — Surveillance Edge-AI & Diagnostic Agricole
+# 🌾 AgroSentinel AI — Surveillance Edge-AI & Diagnostic Agricole
 
 > **Projet développé pour le Hackathon Togo IT Days**  
 > *Solution de surveillance intelligente des champs et de diagnostic des maladies des cultures 100 % intégrée dans le navigateur (Edge-AI / Zéro Serveur).*
@@ -7,7 +7,7 @@
 
 ## 📌 Présentation du Projet
 
-**AgriSentinel AI** est un système d'intelligence artificielle autonome conçu pour assister les agriculteurs en Afrique de l'Ouest (notamment au Togo) dans la protection et la gestion de leurs cultures.
+**AgroSentinel AI** est un système d'intelligence artificielle autonome conçu pour assister les agriculteurs en Afrique de l'Ouest (notamment au Togo) dans la protection et la gestion de leurs cultures.
 
 L'application résout deux défis majeurs :
 1. **Surveillance & Effarouchement (Temps Réel)** : Détection automatique des intrus humains et des animaux/oiseaux nuisibles avec déclenchement d'alarmes acousto-optiques.
@@ -84,5 +84,5 @@ Accédez à l'adresse : **[http://localhost:3000](http://localhost:3000)**
 ## 👥 Équipe
 
 Projet conçu et réalisé lors du **Hackathon Togo IT Days**.
-- **Projet** : AgriSentinel AI
+- **Projet** : AgroSentinel AI
 - **Repository GitHub** : [JoDm007/AgroSentinel-AI](https://github.com/JoDm007/AgroSentinel-AI)

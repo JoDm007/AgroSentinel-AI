@@ -1,5 +1,5 @@
 /**
- * AgriSentinel AI - Télémétrie & Journalisation des évènements
+ * AgroSentinel AI - Télémétrie & Journalisation des évènements
  */
 
 import { CONFIG } from '../config.js';

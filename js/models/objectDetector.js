@@ -1,5 +1,5 @@
 /**
- * AgriSentinel AI - Moteur de Détection d'Objets & Surveillance (COCO-SSD)
+ * AgroSentinel AI - Moteur de Détection d'Objets & Surveillance (COCO-SSD)
  */
 
 import { playScareSound } from '../utils/audioSynth.js';

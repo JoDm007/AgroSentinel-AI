@@ -1,5 +1,5 @@
 /**
- * AgriSentinel AI - Classifier de Maladies Phytosanitaires (MobileNet)
+ * AgroSentinel AI - Classifier de Maladies Phytosanitaires (MobileNet)
  */
 
 import { DISEASE_DATABASE } from '../config.js';
