@@ -18,7 +18,7 @@ import {
 import { loadLeafClassifierModel } from './models/leafClassifier.js';
 import { playScareSound, primeAudioEngine } from './utils/audioSynth.js';
 import { addLogItem, resetFps } from './utils/telemetry.js';
-import { initDiagnosticView } from './views/diagnostic.js';
+import { initDiagnosticView, stopLeafCamera } from './views/diagnostic.js';
 
 // La caméra et le mode démo sont mutuellement exclusifs : deux drapeaux
 // distincts, jamais détournés l'un pour l'autre.
@@ -227,6 +227,11 @@ function switchTab(tabName) {
 
   document.getElementById(`tab-${tabName}-btn`)?.classList.add("active");
   document.getElementById(`tab-${tabName}`)?.classList.add("active");
+
+  // Deux caméras ne peuvent pas tourner en parallèle sur un smartphone,
+  // et laisser un flux actif hors écran vide la batterie pour rien.
+  if (tabName !== "diagnostic") stopLeafCamera({ silent: true });
+  if (tabName !== "surveillance" && isCameraRunning) stopCamera();
 }
 
 // ─── Surveillance : caméra ───────────────────────────────────────────────────

@@ -4,8 +4,12 @@
  * Parcours en 3 étapes :
  *   1. L'agriculteur déclare sa culture (plus rapide et plus fiable qu'une
  *      reconnaissance automatique, et fonctionne hors connexion).
- *   2. Photo optionnelle → contrôle de cadrage par MobileNet.
- *   3. L'agriculteur confirme le symptôme observé → fiche agronomique.
+ *   2. Il pointe la caméra sur une feuille (ou charge une photo). Le contrôle
+ *      de cadrage tourne en direct sur le flux vidéo.
+ *   3. Il confirme le symptôme observé → fiche agronomique.
+ *
+ * ⚠️ L'analyse temps réel porte sur le CADRAGE, pas sur la maladie : voir
+ * l'avertissement en tête de js/models/leafClassifier.js.
  */
 
 import { CROPS, getDiseasesForCrop, DISEASE_DATABASE } from '../config.js';
@@ -14,17 +18,36 @@ import { addLogItem } from '../utils/telemetry.js';
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, none: 3 };
 
+/** Intervalle entre deux analyses du flux vidéo (ms). */
+const SCAN_INTERVAL_MS = 700;
+
 let selectedCropKey = null;
 let selectedDiseaseKey = null;
+
+let leafStream = null;
+let scanTimer = null;
+let lastScanWasPlant = false;
 
 export function initDiagnosticView() {
   buildCropSelector();
 
   document.getElementById("file-input")
     ?.addEventListener("change", handleFileSelect);
-
   document.getElementById("btn-reset-diag")
     ?.addEventListener("click", resetDiagnostic);
+  document.getElementById("btn-retake")
+    ?.addEventListener("click", clearCapture);
+
+  document.getElementById("btn-start-leaf-cam")
+    ?.addEventListener("click", startLeafCamera);
+  document.getElementById("btn-stop-leaf-cam")
+    ?.addEventListener("click", () => stopLeafCamera());
+  document.getElementById("btn-capture")
+    ?.addEventListener("click", captureFrame);
+
+  document.querySelectorAll("#capture-modes .mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => setCaptureMode(btn.dataset.mode));
+  });
 
   updateStepBadge();
 }
@@ -66,32 +89,217 @@ function selectCrop(cropKey) {
   addLogItem("info", `Culture sélectionnée : ${CROPS[cropKey].label}.`);
 }
 
-// ─── Étape 2 : photo optionnelle & contrôle de cadrage ───────────────────────
+// ─── Étape 2a : caméra en direct ─────────────────────────────────────────────
+
+function setCaptureMode(mode) {
+  document.querySelectorAll("#capture-modes .mode-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+
+  const cameraPane = document.getElementById("capture-camera");
+  const filePane = document.getElementById("capture-file");
+
+  if (mode === "camera") {
+    cameraPane.classList.remove("hidden");
+    filePane.classList.add("hidden");
+  } else {
+    stopLeafCamera({ silent: true });
+    cameraPane.classList.add("hidden");
+    filePane.classList.remove("hidden");
+  }
+}
+
+async function startLeafCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    // Cas typique : page servie en http:// depuis un smartphone.
+    showQualityStatus("error", "Caméra inaccessible", window.isSecureContext
+      ? "Ce navigateur n'expose pas l'API caméra."
+      : "La page doit être servie en HTTPS (ou depuis localhost) pour accéder à la caméra.");
+    return;
+  }
+
+  try {
+    leafStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+
+    const video = document.getElementById("leaf-video");
+    video.srcObject = leafStream;
+    await video.play();
+
+    document.getElementById("camera-placeholder").classList.add("hidden");
+    document.getElementById("leaf-video-wrapper").classList.remove("hidden");
+    document.getElementById("capture-actions").classList.remove("hidden");
+    document.getElementById("capture-result").classList.add("hidden");
+    document.getElementById("quality-check").className = "quality-check hidden";
+
+    startLiveScan();
+    addLogItem("info", "Caméra d'analyse foliaire activée.");
+  } catch (err) {
+    console.warn("Caméra foliaire indisponible :", err);
+    showQualityStatus("error", "Caméra indisponible",
+      err?.name === "NotAllowedError"
+        ? "Accès refusé. Autorisez la caméra, ou utilisez le mode Fichier."
+        : "Aucune caméra détectée. Utilisez le mode Fichier.");
+  }
+}
+
+export function stopLeafCamera({ silent = false } = {}) {
+  stopLiveScan();
+
+  if (leafStream) {
+    leafStream.getTracks().forEach(track => track.stop());
+    leafStream = null;
+    if (!silent) addLogItem("info", "Caméra d'analyse foliaire arrêtée.");
+  }
+
+  const video = document.getElementById("leaf-video");
+  if (video) video.srcObject = null;
+
+  document.getElementById("leaf-video-wrapper")?.classList.add("hidden");
+  document.getElementById("capture-actions")?.classList.add("hidden");
+
+  // On ne réaffiche l'invite que si aucune capture n'est en cours d'examen.
+  const hasCapture = !document.getElementById("capture-result")?.classList.contains("hidden");
+  if (!hasCapture) {
+    document.getElementById("camera-placeholder")?.classList.remove("hidden");
+  }
+}
+
+/** Analyse le flux en continu pour guider le cadrage de l'agriculteur. */
+function startLiveScan() {
+  stopLiveScan();
+
+  scanTimer = setInterval(async () => {
+    const video = document.getElementById("leaf-video");
+    if (!leafStream || !video || video.readyState < 2) return;
+
+    if (!isClassifierReady()) {
+      setScanState("pending", "Chargement du modèle…");
+      return;
+    }
+
+    try {
+      const result = await checkImageQuality(video);
+      lastScanWasPlant = result.isPlantLike;
+
+      if (result.isPlantLike) {
+        setScanState("ok", `Feuille détectée — ${shorten(result.matchedLabel)}`);
+      } else {
+        setScanState("warn", `Aucun végétal — ${shorten(result.topLabel)}`);
+      }
+    } catch {
+      setScanState("pending", "Analyse…");
+    }
+
+    // Le bouton s'illumine quand le cadrage est bon : l'agriculteur sait
+    // à quel moment déclencher sans avoir à interpréter le texte.
+    document.getElementById("btn-capture")?.classList.toggle("ready", lastScanWasPlant);
+  }, SCAN_INTERVAL_MS);
+}
+
+function stopLiveScan() {
+  if (scanTimer) {
+    clearInterval(scanTimer);
+    scanTimer = null;
+  }
+  lastScanWasPlant = false;
+  document.getElementById("btn-capture")?.classList.remove("ready");
+}
+
+function setScanState(state, label) {
+  const hud = document.getElementById("scan-hud");
+  const icon = document.getElementById("scan-icon");
+  const text = document.getElementById("scan-text");
+  if (!hud) return;
+
+  const icons = {
+    ok: "fa-solid fa-circle-check",
+    warn: "fa-solid fa-triangle-exclamation",
+    pending: "fa-solid fa-spinner fa-spin",
+  };
+
+  hud.className = `scan-hud ${state}`;
+  if (icon) icon.className = icons[state] ?? icons.pending;
+  if (text) text.textContent = label;
+}
+
+/** Le libellé ImageNet est verbeux : on n'en garde que le premier terme. */
+function shorten(label) {
+  if (!label) return "inconnu";
+  return label.split(",")[0].trim();
+}
+
+/** Fige l'image courante du flux et la soumet à l'analyse. */
+async function captureFrame() {
+  const video = document.getElementById("leaf-video");
+  if (!video || video.readyState < 2 || video.videoWidth === 0) return;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+  stopLeafCamera({ silent: true });
+  document.getElementById("camera-placeholder")?.classList.add("hidden");
+
+  await displayCapture(dataUrl);
+  addLogItem("info", "Image de feuille capturée depuis la caméra.");
+}
+
+// ─── Étape 2b : chargement d'un fichier ──────────────────────────────────────
 
 function handleFileSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = e => displayPreview(e.target.result);
+  reader.onload = e => displayCapture(e.target.result);
   reader.onerror = () => {
     addLogItem("danger", "Impossible de lire le fichier image sélectionné.");
   };
   reader.readAsDataURL(file);
 }
 
-function displayPreview(src) {
-  const prompt = document.getElementById("drop-zone-prompt");
+// ─── Analyse d'une image figée ───────────────────────────────────────────────
+
+async function displayCapture(src) {
   const img = document.getElementById("preview-image");
+  const result = document.getElementById("capture-result");
 
   img.src = src;
-  img.classList.remove("hidden");
-  prompt.classList.add("hidden");
+  result.classList.remove("hidden");
+  document.getElementById("drop-zone-prompt")?.classList.add("hidden");
 
-  img.decode()
-    .then(() => runQualityCheck(img))
-    .catch(() => showQualityStatus("error", "Image illisible",
-      "Le fichier n'a pas pu être décodé. Essayez un autre format (JPG, PNG)."));
+  try {
+    await img.decode();
+    await runQualityCheck(img);
+  } catch {
+    showQualityStatus("error", "Image illisible",
+      "Le fichier n'a pas pu être décodé. Essayez un autre format (JPG, PNG).");
+  }
+
+  // On amène l'agriculteur directement à l'étape suivante.
+  document.getElementById("symptom-list")?.scrollIntoView({
+    behavior: "smooth", block: "center",
+  });
+}
+
+function clearCapture() {
+  const img = document.getElementById("preview-image");
+  const fileInput = document.getElementById("file-input");
+
+  img.src = "";
+  if (fileInput) fileInput.value = "";
+
+  document.getElementById("capture-result")?.classList.add("hidden");
+  document.getElementById("drop-zone-prompt")?.classList.remove("hidden");
+  document.getElementById("quality-check").className = "quality-check hidden";
+
+  const cameraActive = !document.getElementById("capture-camera")?.classList.contains("hidden");
+  if (cameraActive) document.getElementById("camera-placeholder")?.classList.remove("hidden");
 }
 
 async function runQualityCheck(imageElement) {
@@ -190,7 +398,12 @@ function selectDisease(diseaseKey) {
 
   renderDiagnostic(disease);
   updateStepBadge();
-  addLogItem("info", `Diagnostic retenu : ${disease.name}.`);
+  addLogItem(disease.severityLevel === "none" ? "info" : "warning",
+    `Diagnostic retenu : ${disease.name}.`);
+
+  document.getElementById("diagnostic-result")?.scrollIntoView({
+    behavior: "smooth", block: "nearest",
+  });
 }
 
 // ─── Rendu de la fiche agronomique ───────────────────────────────────────────
@@ -237,6 +450,8 @@ function resetDiagnostic() {
   selectedCropKey = null;
   selectedDiseaseKey = null;
 
+  stopLeafCamera({ silent: true });
+
   document.querySelectorAll(".crop-chip").forEach(c => c.classList.remove("active"));
 
   const symptomList = document.getElementById("symptom-list");
@@ -245,14 +460,7 @@ function resetDiagnostic() {
       `<p class="symptom-placeholder">Choisissez d'abord une culture à l'étape 1.</p>`;
   }
 
-  const img = document.getElementById("preview-image");
-  const fileInput = document.getElementById("file-input");
-  img.src = "";
-  img.classList.add("hidden");
-  fileInput.value = "";
-  document.getElementById("drop-zone-prompt").classList.remove("hidden");
-  document.getElementById("quality-check").className = "quality-check hidden";
-
+  clearCapture();
   hideResult();
   updateStepBadge();
 }

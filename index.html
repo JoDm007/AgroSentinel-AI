@@ -188,21 +188,71 @@
             </div>
           </div>
 
-          <!-- ÉTAPE 2 : photo -->
+          <!-- ÉTAPE 2 : capture de la feuille -->
           <div class="diag-step">
             <div class="step-title">
-              <span class="step-num">2</span> Photo de la feuille
+              <span class="step-num">2</span> Analyser la feuille
               <span class="optional">— optionnel</span>
             </div>
 
-            <div class="drop-zone" id="drop-zone">
-              <input type="file" id="file-input" accept="image/*">
-              <div class="drop-zone-content" id="drop-zone-prompt">
-                <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-                <h4>Glissez une image ici ou cliquez pour choisir</h4>
-                <p>JPG, PNG ou WEBP</p>
+            <div class="capture-modes" id="capture-modes">
+              <button type="button" class="mode-btn active" data-mode="camera">
+                <i class="fa-solid fa-camera"></i> Caméra
+              </button>
+              <button type="button" class="mode-btn" data-mode="file">
+                <i class="fa-solid fa-image"></i> Fichier
+              </button>
+            </div>
+
+            <!-- Mode caméra -->
+            <div class="capture-pane" id="capture-camera">
+              <div class="camera-placeholder" id="camera-placeholder">
+                <div class="upload-icon"><i class="fa-solid fa-camera"></i></div>
+                <h4>Pointez la caméra vers une feuille</h4>
+                <p>L'analyse du cadrage se fait en direct.</p>
+                <button class="btn btn-primary" id="btn-start-leaf-cam" type="button">
+                  <i class="fa-solid fa-play"></i> Activer la caméra
+                </button>
               </div>
-              <img id="preview-image" src="" alt="Aperçu de la feuille analysée" class="preview-img hidden">
+
+              <div class="leaf-video-wrapper hidden" id="leaf-video-wrapper">
+                <video id="leaf-video" autoplay playsinline muted></video>
+                <div class="scan-frame"></div>
+                <div class="scan-hud" id="scan-hud">
+                  <i class="fa-solid fa-spinner fa-spin" id="scan-icon"></i>
+                  <span id="scan-text">Analyse du cadrage…</span>
+                </div>
+              </div>
+
+              <div class="capture-actions hidden" id="capture-actions">
+                <button class="btn btn-primary btn-block" id="btn-capture" type="button">
+                  <i class="fa-solid fa-crosshairs"></i> Capturer et analyser
+                </button>
+                <button class="btn btn-sm btn-outline btn-icon" id="btn-stop-leaf-cam"
+                        type="button" title="Arrêter la caméra" aria-label="Arrêter la caméra">
+                  <i class="fa-solid fa-stop"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode fichier -->
+            <div class="capture-pane hidden" id="capture-file">
+              <div class="drop-zone" id="drop-zone">
+                <input type="file" id="file-input" accept="image/*">
+                <div class="drop-zone-content" id="drop-zone-prompt">
+                  <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                  <h4>Glissez une image ici ou cliquez pour choisir</h4>
+                  <p>JPG, PNG ou WEBP</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Aperçu commun aux deux modes -->
+            <div class="capture-result hidden" id="capture-result">
+              <img id="preview-image" src="" alt="Feuille analysée" class="preview-img">
+              <button class="btn btn-sm btn-outline" id="btn-retake" type="button">
+                <i class="fa-solid fa-rotate-left"></i> Reprendre
+              </button>
             </div>
 
             <div class="quality-check hidden" id="quality-check">
@@ -217,9 +267,9 @@
               <i class="fa-solid fa-circle-info"></i>
               <span>
                 <strong>Contrôle de cadrage uniquement.</strong>
-                MobileNet (ImageNet) vérifie que la photo contient bien un végétal.
-                Il n'établit pas le diagnostic : ImageNet ne contient aucune classe
-                de maladie phytosanitaire.
+                MobileNet (ImageNet) vérifie en direct que l'image contient bien un
+                végétal. Il n'établit pas le diagnostic : ImageNet ne contient aucune
+                classe de maladie phytosanitaire.
               </span>
             </p>
           </div>

@@ -17,3 +17,6 @@ desktop.ini
 # Logs & temporaires
 *.log
 .cache/
+
+# Certificats de développement générés par tools/serve-https.py
+.certs/

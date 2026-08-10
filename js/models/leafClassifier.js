@@ -130,30 +130,51 @@ function toProbabilities(raw) {
 
 // ─── Contrôle de cadrage ──────────────────────────────────────────────────────
 
+/** Ensemble de mots-clés, prêt pour une comparaison en O(1). */
+const PLANT_WORDS = new Set(PLANT_GATE_KEYWORDS);
+
 /**
- * Vérifie que l'image soumise contient un contexte végétal.
+ * Un libellé ImageNet est une liste de synonymes séparés par des virgules
+ * ("hip, rose hip, rosehip"). On le découpe en mots et on cherche une
+ * correspondance EXACTE : une recherche par sous-chaîne ferait passer
+ * "spotlight" pour un pot de fleurs et "bear" pour un épi de maïs.
+ */
+function isPlantLabel(className) {
+  const words = className.toLowerCase().split(/[^a-z]+/);
+  return words.some(word => PLANT_WORDS.has(word));
+}
+
+/**
+ * Vérifie qu'une source visuelle contient un contexte végétal.
  *
- * @param {HTMLImageElement} imageElement
+ * Accepte une image, un flux vidéo en direct ou un canvas : c'est ce qui
+ * permet d'analyser la caméra en continu comme un fichier chargé.
+ *
+ * @param {HTMLImageElement|HTMLVideoElement|HTMLCanvasElement} source
  * @returns {Promise<{isPlantLike: boolean, topLabel: string,
  *                    topProbability: number, matchedLabel: string|null}>}
  */
-export async function checkImageQuality(imageElement) {
+export async function checkImageQuality(source) {
   if (!model) throw new Error("Modèle MobileNet non initialisé.");
 
   // Sans cette attente, l'inférence peut porter sur une image dont le
   // décodage n'est pas terminé (clic rapide après l'upload).
-  if (!imageElement.complete || imageElement.naturalWidth === 0) {
-    await imageElement.decode();
+  if (source instanceof HTMLImageElement &&
+      (!source.complete || source.naturalWidth === 0)) {
+    await source.decode();
   }
 
-  const predictions = await classify(imageElement, 10);
+  // HAVE_CURRENT_DATA : en deçà, la vidéo n'a aucune image exploitable.
+  if (source instanceof HTMLVideoElement &&
+      (source.readyState < 2 || source.videoWidth === 0)) {
+    throw new Error("Flux vidéo pas encore prêt.");
+  }
+
+  const predictions = await classify(source, 10);
 
   const matched = predictions
     .filter(pred => pred.probability >= CONFIG.PLANT_GATE_MIN_PROBABILITY)
-    .find(pred => {
-      const label = pred.className.toLowerCase();
-      return PLANT_GATE_KEYWORDS.some(keyword => label.includes(keyword));
-    });
+    .find(pred => isPlantLabel(pred.className));
 
   return {
     isPlantLike: Boolean(matched),

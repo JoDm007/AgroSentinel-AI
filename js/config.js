@@ -36,14 +36,27 @@ export const CROPS = {
  * "manioc", "tomate", "mil" ni "sorgho". Il ne peut donc pas — et ne doit pas —
  * établir un diagnostic phytosanitaire. Il sert uniquement à signaler
  * à l'utilisateur si sa photo semble ne contenir aucun végétal.
+ *
+ * ⚠️ Ces termes sont comparés en MOTS ENTIERS, jamais en sous-chaînes :
+ * "bear" contient "ear", "spotlight" contient "pot" et "figure" contient
+ * "fig". Une comparaison par sous-chaîne déclarait un projecteur "végétal".
  */
 export const PLANT_GATE_KEYWORDS = [
-  "leaf", "plant", "flower", "daisy", "orchid", "slipper", "corn", "ear",
-  "hay", "grass", "vine", "fig", "nettle", "fern", "moss", "bud", "stalk",
-  "seed", "acorn", "buckeye", "rapeseed", "hip", "cardoon", "artichoke",
-  "broccoli", "cauliflower", "cabbage", "zucchini", "cucumber", "pepper",
-  "mushroom", "agaric", "pot", "flowerpot", "greenhouse", "beetle",
-  "butterfly", "grasshopper", "cricket", "mantis", "aphid", "worm", "snail",
+  // Organes et termes génériques
+  "leaf", "leaves", "plant", "flower", "blossom", "bud", "stalk", "stem",
+  "seed", "vine", "shrub", "tree", "foliage", "herb", "sprout", "seedling",
+  // Cultures et plantes présentes dans ImageNet
+  "corn", "ear", "spike", "capitulum", "hay", "rapeseed", "cardoon",
+  "artichoke", "broccoli", "cauliflower", "cabbage", "zucchini", "courgette",
+  "cucumber", "cuke", "pepper", "acorn", "buckeye", "hip", "rosehip",
+  "daisy", "orchid", "nettle", "fern", "moss", "fig", "pineapple",
+  "banana", "strawberry", "pomegranate", "jackfruit",
+  // Champignons (contexte de terrain)
+  "mushroom", "agaric", "bolete", "earthstar", "stinkhorn", "fungus",
+  // Contenants et lieux de culture
+  "flowerpot", "greenhouse", "glasshouse", "nursery",
+  // Insectes indissociables du feuillage
+  "leafhopper", "grasshopper", "mantis", "mantid", "caterpillar",
 ];
 
 /**
