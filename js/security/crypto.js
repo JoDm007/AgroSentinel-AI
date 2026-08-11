@@ -97,11 +97,22 @@ export async function importSignaturePublicKey(base64) {
   return crypto.subtle.importKey("raw", fromBase64(base64), ECDSA_KEYGEN, true, ["verify"]);
 }
 
+/**
+ * Empreinte courte et lisible d'une clé publique déjà exportée en base64.
+ *
+ * C'est cette valeur que deux personnes comparent de vive voix pour
+ * s'assurer qu'elles parlent bien de la même clé — le seul moyen, sans
+ * autorité de certification, d'ancrer la confiance sur autre chose que
+ * ce que le fichier prétend être.
+ */
+export async function fingerprintPublicKeyB64(base64, prefix) {
+  const digest = await crypto.subtle.digest("SHA-256", fromBase64(base64));
+  return `${prefix}-` + toHex(digest).slice(0, 6).toUpperCase();
+}
+
 /** Identifiant court et stable du capteur, dérivé de sa clé publique. */
 export async function deriveSensorId(publicKey) {
-  const raw = await crypto.subtle.exportKey("raw", publicKey);
-  const digest = await crypto.subtle.digest("SHA-256", raw);
-  return "AGS-" + toHex(digest).slice(0, 6).toUpperCase();
+  return fingerprintPublicKeyB64(await exportPublicKey(publicKey), "AGS");
 }
 
 export async function signText(privateKey, text) {

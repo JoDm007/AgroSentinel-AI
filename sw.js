@@ -15,7 +15,7 @@
 // ⚠️ À INCRÉMENTER À CHAQUE DÉPLOIEMENT : c'est cette valeur qui
 // invalide les caches précédents. Sans cela, un appareil déjà visité
 // continue de servir l'ancienne version depuis son cache.
-const VERSION = 'agrosentinel-v2';
+const VERSION = 'agrosentinel-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -30,6 +30,7 @@ const SHELL_ASSETS = [
   './js/models/leafClassifier.js',
   './js/models/imagenetClasses.js',
   './js/views/diagnostic.js',
+  './js/views/security.js',
   './dashboard.html',
   './js/views/dashboard.js',
   './js/security/crypto.js',
@@ -40,10 +41,16 @@ const SHELL_ASSETS = [
   './vendor/tf.min.js',
   './vendor/coco-ssd.min.js',
   './vendor/fonts/fonts.css',
+  './vendor/fonts/Outfit-latin-3.woff2',
+  './vendor/fonts/Outfit-latin-ext-2.woff2',
+  './vendor/fonts/JetBrainsMono-latin-1.woff2',
+  './vendor/fonts/JetBrainsMono-latin-ext-0.woff2',
   './vendor/fontawesome/css/all.min.css',
   './vendor/fontawesome/webfonts/fa-solid-900.woff2',
+  './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
 ];
 
 // ─── Installation : pré-cache de l'app shell ────────────────────────────────
@@ -84,6 +91,24 @@ self.addEventListener('activate', event => {
     }
     await self.clients.claim();
   })());
+});
+
+// ─── Interrogation par la page ──────────────────────────────────────────────
+
+/**
+ * La page préchauffe elle-même le cache des poids IA (voir warmOfflineCache
+ * dans js/app.js) : au tout premier chargement, le service worker ne
+ * contrôle pas encore la page et ces requêtes lui échappent.
+ *
+ * Elle doit donc écrire dans le cache que CE service worker conservera —
+ * l'activation purge tout nom ne commençant pas par VERSION. Plutôt que de
+ * dupliquer la constante des deux côtés (source de désynchronisation
+ * silencieuse), la page demande le nom réel.
+ */
+self.addEventListener('message', event => {
+  if (event.data?.type === 'GET_CACHE_NAMES') {
+    event.ports[0]?.postMessage({ version: VERSION, runtime: RUNTIME_CACHE });
+  }
 });
 
 // ─── Interception réseau ────────────────────────────────────────────────────

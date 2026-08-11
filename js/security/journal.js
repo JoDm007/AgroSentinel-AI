@@ -16,22 +16,22 @@
 
 import {
   generateSensorKeyPair, deriveSensorId, exportPublicKey, importSignaturePublicKey,
-  generateManagerKeyPair, importManagerPublicKey,
+  generateManagerKeyPair, importManagerPublicKey, fingerprintPublicKeyB64,
   deriveKeyFromPassphrase, wrapManagerPrivateKey, unwrapManagerPrivateKey,
   sealForManager, openAsManager,
   signText, verifyText, sha256Hex, randomBytes, toBase64, fromBase64,
 } from './crypto.js';
 
 const DB_NAME = "agrosentinel-secure";
-const DB_VERSION = 1;
+// v2 : ajout du store "pending" (événements produits avant qu'un
+// destinataire de chiffrement ne soit connu).
+const DB_VERSION = 2;
 const STORE_META = "meta";
 const STORE_EVENTS = "events";
+const STORE_PENDING = "pending";
 
 /** Empreinte conventionnelle du maillon initial de la chaîne. */
 export const GENESIS_HASH = "0".repeat(64);
-
-/** Événements produits avant l'initialisation du gestionnaire. */
-const pendingPayloads = [];
 
 let dbPromise = null;
 
@@ -50,9 +50,17 @@ function openDatabase() {
       if (!db.objectStoreNames.contains(STORE_EVENTS)) {
         db.createObjectStore(STORE_EVENTS, { keyPath: "seq" });
       }
+      if (!db.objectStoreNames.contains(STORE_PENDING)) {
+        db.createObjectStore(STORE_PENDING, { keyPath: "id", autoIncrement: true });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    // Une version antérieure de la base est ouverte dans un autre onglet :
+    // sans ce garde, la promesse ne se résout jamais et l'interface reste
+    // bloquée sur « Lecture de l'état… » sans rien dire.
+    request.onblocked = () => reject(new Error(
+      "Une autre page AgroSentinel est ouverte : fermez-la puis rechargez."));
   });
 
   return dbPromise;
@@ -108,6 +116,21 @@ export async function isManagerConfigured() {
 }
 
 /**
+ * Clé publique du gestionnaire de CET appareil, avec son empreinte courte.
+ * C'est ce couple que le gestionnaire transmet au capteur pour l'appairer.
+ */
+export async function getManagerIdentity() {
+  const record = await getMeta("manager");
+  if (!record) return null;
+
+  return {
+    publicKeyB64: record.publicKeyB64,
+    fingerprint: await fingerprintPublicKeyB64(record.publicKeyB64, "MGR"),
+    createdAt: record.createdAt,
+  };
+}
+
+/**
  * Initialise le compte gestionnaire à partir d'une phrase de passe.
  * La phrase n'est stockée nulle part : elle sert à emballer la clé privée.
  */
@@ -152,6 +175,82 @@ export async function unlockManager(passphrase) {
   }
 }
 
+// ─── Destinataire du chiffrement ─────────────────────────────────────────────
+
+/**
+ * Vers QUI le capteur chiffre-t-il ?
+ *
+ * Deux cas, et l'ordre compte :
+ *   1. Une clé publique de gestionnaire IMPORTÉE — le vrai scénario terrain,
+ *      où le gestionnaire est sur un autre appareil. Le capteur chiffre alors
+ *      vers quelqu'un qu'il ne peut pas relire : c'est ce qui rend l'appareil
+ *      volé réellement inexploitable.
+ *   2. Le gestionnaire LOCAL, à défaut — pratique pour la démonstration sur
+ *      une seule machine, mais la séparation des rôles n'y est que logique :
+ *      le journal chiffré et la clé privée emballée cohabitent.
+ */
+export async function getRecipient() {
+  const imported = await getMeta("recipient");
+  if (imported) {
+    return {
+      publicKeyB64: imported.publicKeyB64,
+      fingerprint: imported.fingerprint,
+      source: "imported",
+      importedAt: imported.importedAt,
+    };
+  }
+
+  const local = await getMeta("manager");
+  if (local) {
+    return {
+      publicKeyB64: local.publicKeyB64,
+      fingerprint: await fingerprintPublicKeyB64(local.publicKeyB64, "MGR"),
+      source: "local",
+      importedAt: local.createdAt,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Appaire ce capteur à un gestionnaire distant.
+ *
+ * Les événements DÉJÀ écrits restent chiffrés pour le destinataire
+ * précédent — on ne peut pas les rechiffrer sans les déchiffrer, et le
+ * capteur n'en a précisément pas le droit. C'est la conséquence directe du
+ * modèle, pas une limitation d'implémentation.
+ *
+ * @throws {Error} si la valeur fournie n'est pas une clé publique ECDH P-256.
+ */
+export async function setRecipientPublicKey(base64) {
+  const clean = String(base64).replace(/\s+/g, "");
+  if (!clean) throw new Error("Aucune clé fournie.");
+
+  try {
+    await importManagerPublicKey(clean);
+  } catch {
+    throw new Error("Clé invalide : ce n'est pas une clé publique ECDH P-256.");
+  }
+
+  const fingerprint = await fingerprintPublicKeyB64(clean, "MGR");
+  await putMeta({
+    id: "recipient",
+    publicKeyB64: clean,
+    fingerprint,
+    importedAt: new Date().toISOString(),
+  });
+
+  await flushPending();
+  return fingerprint;
+}
+
+/** Revient au gestionnaire local (démonstration mono-appareil). */
+export async function clearRecipient() {
+  await transact(STORE_META, "readwrite", s => s.delete("recipient"));
+  notifyJournalChanged();
+}
+
 // ─── Écriture d'un événement ─────────────────────────────────────────────────
 
 async function lastEvent() {
@@ -160,19 +259,43 @@ async function lastEvent() {
 }
 
 /**
- * Ajoute un événement au journal : chiffrement, chaînage, signature.
- * Si le gestionnaire n'est pas encore configuré, l'événement est mis de
- * côté en mémoire et sera écrit dès l'initialisation.
+ * Les écritures sont sérialisées.
+ *
+ * Deux appels concurrents liraient le même dernier maillon, calculeraient le
+ * même numéro de séquence, et le second écraserait le premier (le store a
+ * pour clé `seq`) : un événement disparaîtrait sans que la chaîne paraisse
+ * rompue. Cas réaliste — un diagnostic validé pendant une alerte caméra.
  */
-export async function appendEvent(payload) {
-  const managerRecord = await getMeta("manager");
-  if (!managerRecord) {
-    pendingPayloads.push(payload);
+let writeChain = Promise.resolve();
+
+function enqueueWrite(task) {
+  const next = writeChain.then(task);
+  writeChain = next.catch(() => {});
+  return next;
+}
+
+/**
+ * Ajoute un événement au journal : chiffrement, chaînage, signature.
+ *
+ * Tant qu'aucun destinataire n'est connu, l'événement est mis en file
+ * DANS INDEXEDDB — pas en mémoire : la vue capteur et la console sont deux
+ * pages distinctes, et une file en mémoire serait perdue à la navigation.
+ */
+export function appendEvent(payload) {
+  return enqueueWrite(() => writeEvent(payload));
+}
+
+async function writeEvent(payload) {
+  const recipient = await getRecipient();
+  if (!recipient) {
+    await transact(STORE_PENDING, "readwrite",
+      s => s.add({ payload, queuedAt: new Date().toISOString() }));
+    notifyJournalChanged();
     return null;
   }
 
   const sensor = await ensureSensorIdentity();
-  const managerPublicKey = await importManagerPublicKey(managerRecord.publicKeyB64);
+  const managerPublicKey = await importManagerPublicKey(recipient.publicKeyB64);
 
   const previous = await lastEvent();
   const seq = previous ? previous.seq + 1 : 1;
@@ -185,12 +308,39 @@ export async function appendEvent(payload) {
 
   const event = { seq, ts, sensorId: sensor.sensorId, sealed, prevHash, hash, sig };
   await transact(STORE_EVENTS, "readwrite", s => s.put(event));
+  notifyJournalChanged();
   return event;
 }
 
-async function flushPending() {
-  while (pendingPayloads.length) {
-    await appendEvent(pendingPayloads.shift());
+// ─── File d'attente persistante ──────────────────────────────────────────────
+
+export async function countPendingEvents() {
+  const rows = await transact(STORE_PENDING, "readonly", s => s.getAll());
+  return (rows || []).length;
+}
+
+/** Écrit les événements en attente, dans leur ordre d'arrivée. */
+function flushPending() {
+  return enqueueWrite(async () => {
+    const rows = (await transact(STORE_PENDING, "readonly", s => s.getAll())) || [];
+    rows.sort((a, b) => a.id - b.id);
+
+    for (const row of rows) {
+      // writeEvent, pas appendEvent : on est déjà dans la file d'écriture.
+      const written = await writeEvent(row.payload);
+      if (!written) return; // toujours aucun destinataire : on garde la file
+      await transact(STORE_PENDING, "readwrite", s => s.delete(row.id));
+    }
+  });
+}
+
+/**
+ * Signale un changement du journal aux vues qui l'affichent.
+ * Évite de faire remonter l'état par un sondage périodique.
+ */
+function notifyJournalChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("journal:changed"));
   }
 }
 
@@ -288,7 +438,22 @@ export async function exportBundle() {
   return bundle;
 }
 
-/** Vérifie un lot reçu d'un capteur tiers. */
+/**
+ * Vérifie un lot reçu d'un capteur tiers.
+ *
+ * ⚠️ CE QUE CETTE VÉRIFICATION PROUVE — ET CE QU'ELLE NE PROUVE PAS.
+ * Les signatures sont vérifiées avec la clé publique CONTENUE DANS LE LOT.
+ * Cela établit la cohérence interne du fichier : il a bien été produit d'un
+ * seul tenant par le détenteur de cette clé, et n'a pas été retouché depuis.
+ *
+ * Cela n'établit PAS que cette clé est celle du capteur attendu : sans
+ * autorité de certification, rien dans le fichier ne peut le dire. C'est à
+ * l'auditeur de comparer l'empreinte renvoyée ici (`derivedSensorId`) à
+ * l'identifiant que le capteur lui a communiqué par un autre canal.
+ *
+ * `sensorIdMatches` détecte le cas grossier où le lot affiche un identifiant
+ * qui ne correspond pas à sa propre clé.
+ */
 export async function verifyBundle(bundle) {
   const sensorPublicKey = await importSignaturePublicKey(bundle.sensorPublicKey);
   const expectedHash = await sha256Hex(JSON.stringify(bundle.events));
@@ -296,9 +461,14 @@ export async function verifyBundle(bundle) {
   const bundleIntact = expectedHash === bundle.bundleHash
     && await verifyText(sensorPublicKey, bundle.bundleHash, bundle.bundleSignature);
 
+  const derivedSensorId = await fingerprintPublicKeyB64(bundle.sensorPublicKey, "AGS");
+
   return {
     bundleIntact,
     sensorPublicKey,
+    derivedSensorId,
+    claimedSensorId: bundle.sensorId,
+    sensorIdMatches: derivedSensorId === bundle.sensorId,
     results: await verifyChain(bundle.events, sensorPublicKey),
   };
 }

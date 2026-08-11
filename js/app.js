@@ -20,6 +20,7 @@ import { playScareSound, primeAudioEngine } from './utils/audioSynth.js';
 import { addLogItem, resetFps } from './utils/telemetry.js';
 import { registerServiceWorker } from './utils/pwa.js';
 import { initDiagnosticView, stopLeafCamera } from './views/diagnostic.js';
+import { initSecurityView } from './views/security.js';
 
 // La caméra et le mode démo sont mutuellement exclusifs : deux drapeaux
 // distincts, jamais détournés l'un pour l'autre.
@@ -41,6 +42,10 @@ document.addEventListener("DOMContentLoaded", () => {
   initDiagnosticView();
   syncSurveillanceUI();
 
+  // Indépendant du chargement des modèles : le journal doit afficher son
+  // état même si TensorFlow.js échoue.
+  initSecurityView();
+
   registerServiceWorker().then(ok => {
     if (!ok) setOfflineStatus("unavailable", "Non supporté");
   });
@@ -49,8 +54,43 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // ─── Mode hors ligne (PWA) ───────────────────────────────────────────────────
 
-/** Doit rester aligné sur RUNTIME_CACHE dans sw.js. */
-const RUNTIME_CACHE = "agrosentinel-v1-runtime";
+/**
+ * ⚠️ DOIT rester aligné sur VERSION dans sw.js.
+ *
+ * Le service worker purge à l'activation TOUT cache dont le nom ne commence
+ * pas par sa VERSION : un nom désaligné ici ferait effacer les 23 Mo de
+ * poids préchauffés à chaque redéploiement, et les stockerait en double
+ * (une fois par la page, une fois par le service worker).
+ */
+const SW_VERSION = "agrosentinel-v3";
+const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
+
+/**
+ * Demande au service worker actif le nom réel de son cache runtime.
+ *
+ * Filet de sécurité contre la désynchronisation : si la constante ci-dessus
+ * venait à diverger, le nom fourni par le service worker fait foi. Repli sur
+ * la constante quand aucun service worker ne contrôle encore la page (premier
+ * chargement) ou quand la réponse tarde.
+ */
+async function resolveRuntimeCacheName() {
+  const controller = navigator.serviceWorker?.controller;
+  if (!controller) return RUNTIME_CACHE;
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const channel = new MessageChannel();
+      const timer = setTimeout(() => reject(new Error("timeout")), 1000);
+      channel.port1.onmessage = event => {
+        clearTimeout(timer);
+        resolve(event.data?.runtime || RUNTIME_CACHE);
+      };
+      controller.postMessage({ type: "GET_CACHE_NAMES" }, [channel.port2]);
+    });
+  } catch {
+    return RUNTIME_CACHE;
+  }
+}
 
 /**
  * Met explicitement en cache les poids des modèles.
@@ -68,7 +108,7 @@ async function warmOfflineCache() {
 
   try {
     setOfflineStatus("pending", "Mise en cache…");
-    const cache = await caches.open(RUNTIME_CACHE);
+    const cache = await caches.open(await resolveRuntimeCacheName());
 
     const manifests = ["./models/coco-ssd/model.json", "./models/mobilenet/model.json"];
     const urls = [];
@@ -143,7 +183,9 @@ async function bootstrapModels() {
 
     if (statusEl) {
       statusEl.textContent = "Prêts (COCO-SSD & MobileNet)";
-      statusEl.style.color = "#34d399";
+      // Les couleurs restent définies dans style.css : le thème doit pouvoir
+      // changer sans qu'on ait à retrouver des teintes codées en dur ici.
+      statusEl.style.color = "var(--lime-ink)";
     }
 
     document.getElementById("loading-overlay")?.classList.add("hidden");
@@ -156,7 +198,7 @@ async function bootstrapModels() {
 
     if (statusEl) {
       statusEl.textContent = "Échec du chargement";
-      statusEl.style.color = "#f87171";
+      statusEl.style.color = "var(--danger-ink)";
     }
 
     // L'overlay reste visible mais devient explicite au lieu de tourner

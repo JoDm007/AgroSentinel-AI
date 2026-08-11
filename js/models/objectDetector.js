@@ -214,7 +214,10 @@ function renderPredictions(predictions, canvasElement, canvasCtx, transform, wit
     const objectClass = pred.class.toLowerCase();
     const percent = Math.round(pred.score * 100);
 
-    let color = "#06b6d4";
+    // Les cadres sont dessinés sur le flux vidéo, seule zone sombre de
+    // l'interface : ces teintes sont choisies pour tenir sur du noir, avec
+    // une étiquette en texte noir par-dessus.
+    let color = "#a3e635";
     let labelText = `${pred.class.toUpperCase()} (${percent}%)`;
 
     if (objectClass === "person") {

@@ -8,10 +8,10 @@
 
   <!-- PWA : installable sur smartphone et utilisable sans réseau -->
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#090d16">
+  <meta name="theme-color" content="#f8fafc">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="AgroSentinel">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -46,6 +46,10 @@
       <div class="status-badge" id="model-status">
         <i class="fa-solid fa-brain"></i>
         <span class="status-label">Modèles : <strong id="models-loaded-text">Chargement...</strong></span>
+      </div>
+      <div class="status-badge" id="journal-status" title="Journal sécurisé : événements signés et chiffrés">
+        <i class="fa-solid fa-file-shield" id="journal-icon"></i>
+        <span class="status-label">Journal : <strong id="journal-text">…</strong></span>
       </div>
       <a class="btn btn-sm btn-outline" href="dashboard.html">
         <i class="fa-solid fa-shield-halved"></i> Console gestionnaire
@@ -167,6 +171,72 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Journal sécurisé : destinataire du chiffrement & appairage -->
+      <div class="panel security-panel">
+        <div class="panel-header">
+          <h3><i class="fa-solid fa-file-shield"></i> Journal sécurisé &amp; destinataire</h3>
+          <span class="badge badge-pulse-green" id="journal-count-badge">0 signé</span>
+        </div>
+
+        <div class="quality-check" id="recipient-state">
+          <i id="recipient-icon" class="fa-solid fa-circle-notch fa-spin"></i>
+          <div class="quality-text">
+            <strong id="recipient-title">Lecture de l'état du journal…</strong>
+            <span id="recipient-detail"></span>
+          </div>
+        </div>
+
+        <div class="pairing-grid">
+          <div class="pairing-explain">
+            <div class="step-title">
+              <span class="step-num"><i class="fa-solid fa-key"></i></span>
+              Appairer un gestionnaire distant
+            </div>
+            <p class="console-help">
+              Sur l'appareil du gestionnaire, ouvrez la console et copiez la clé publique
+              affichée dans « Appairer un capteur ». Collez-la ici : le capteur chiffrera
+              alors chaque événement pour lui — et <strong>ne pourra plus les relire</strong>.
+              C'est ce qui rend un appareil volé inexploitable.
+            </p>
+            <p class="console-help">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <strong>Comparez l'empreinte de vive voix.</strong> Il n'existe aucune autorité
+              de certification ici : rien dans la clé collée ne prouve à qui elle appartient.
+              L'empreinte annoncée par le gestionnaire est le seul ancrage de confiance.
+            </p>
+            <p class="sensor-identity">
+              Identité de ce capteur : <code id="sensor-id-sensorview">…</code>
+            </p>
+          </div>
+
+          <div class="pairing-form">
+            <label class="field">
+              <span>Clé publique du gestionnaire (base64)</span>
+              <textarea id="recipient-input" class="key-input" rows="3" spellcheck="false"
+                        autocomplete="off"
+                        placeholder="Collez ici la clé publique ECDH P-256…"></textarea>
+            </label>
+
+            <div class="pairing-actions">
+              <button class="btn btn-primary" id="btn-pair" type="button">
+                <i class="fa-solid fa-link"></i> Appairer
+              </button>
+              <button class="btn btn-outline hidden" id="btn-unpair" type="button">
+                <i class="fa-solid fa-link-slash"></i> Gestionnaire local
+              </button>
+            </div>
+
+            <div class="quality-check hidden" id="pairing-result">
+              <i id="pairing-icon" class="fa-solid fa-circle-check"></i>
+              <div class="quality-text">
+                <strong id="pairing-title"></strong>
+                <span id="pairing-detail"></span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

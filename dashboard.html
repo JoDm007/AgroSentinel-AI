@@ -7,7 +7,7 @@
   <meta name="description" content="Console de supervision sécurisée : journal d'événements signé, chaîné et chiffré, vérifiable hors ligne.">
 
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#090d16">
+  <meta name="theme-color" content="#f8fafc">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 
@@ -151,6 +151,26 @@
         <div class="panel">
           <div class="panel-header">
             <h3><i class="fa-solid fa-share-nodes"></i> Transmission &amp; audit</h3>
+          </div>
+
+          <div class="diag-step">
+            <div class="step-title"><span class="step-num"><i class="fa-solid fa-key"></i></span> Appairer un capteur</div>
+            <p class="console-help">
+              Transmettez cette clé publique au capteur (vue capteur →
+              « Journal sécurisé &amp; destinataire »). Il chiffrera alors ses événements
+              pour vous seul, sans pouvoir les relire.
+            </p>
+            <p class="console-help">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              Annoncez l'empreinte <strong id="manager-fingerprint">MGR-……</strong> de vive voix :
+              c'est le seul moyen pour le capteur de vérifier qu'il appaire bien cette console
+              et non celle d'un tiers.
+            </p>
+            <textarea id="manager-pubkey" class="key-input" rows="3" readonly
+                      spellcheck="false" aria-label="Clé publique du gestionnaire"></textarea>
+            <button class="btn btn-outline btn-block" id="btn-copy-key" type="button">
+              <i class="fa-solid fa-copy"></i> Copier la clé publique
+            </button>
           </div>
 
           <div class="diag-step">

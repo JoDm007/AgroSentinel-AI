@@ -41,9 +41,15 @@ C'est le cœur du projet. Deux rôles, deux jeux de clés, des capacités volont
 └────────────────────────────────────┘   └────────────────────────────────────┘
 ```
 
+### L'appairage
+
+Le capteur doit savoir **vers qui** chiffrer. La console affiche sa clé publique et son empreinte courte (`MGR-XXXXXX`) ; le capteur la colle dans *Journal sécurisé & destinataire*. Aucune autorité de certification n'intervient : les deux personnes **comparent l'empreinte de vive voix**. C'est le seul ancrage de confiance, et il est explicite dans l'interface plutôt que sous-entendu.
+
+À défaut d'appairage, le capteur chiffre vers la console du même appareil. C'est commode pour démontrer sur une seule machine, mais la séparation des rôles n'y est alors que logique — l'interface le signale au lieu de le taire.
+
 **Trois conséquences vérifiables :**
 
-1. **Un capteur volé ne livre aucun historique.** Il n'a jamais possédé la clé de déchiffrement.
+1. **Un capteur volé ne livre aucun historique** — dès lors qu'il est appairé à un gestionnaire distant. Il n'a jamais possédé la clé de déchiffrement.
 2. **Nul ne peut forger une alerte.** La clé de signature est générée non exportable : même le code JavaScript de l'application ne peut pas la lire.
 3. **L'intégrité se vérifie sans droit de lecture.** Le chaînage SHA-256 porte sur le *chiffré* : une coopérative ou un assureur peut attester qu'un historique n'a pas été retouché **sans accéder au contenu de l'exploitation**.
 
@@ -67,7 +73,7 @@ File d'attente locale (IndexedDB)
 Console gestionnaire → vérifie → ✓ Vérifié / ✗ Falsifié
 ```
 
-Environ **350 octets par événement**. L'`imageHash` permet de prouver plus tard qu'une photo présentée correspond bien à une alerte, **sans que la photo ait jamais circulé**.
+Environ **580 octets par événement**, mesurés (clé éphémère 88 o, signature 88 o, deux empreintes de 64 o, chiffré ~180 o, et le reste en métadonnées). L'`imageHash` permet de prouver plus tard qu'une photo présentée correspond bien à une alerte, **sans que la photo ait jamais circulé** — à condition d'avoir conservé le fichier exact, l'empreinte portant sur l'encodage JPEG produit à la capture.
 
 ### Menaces et contre-mesures
 
@@ -91,7 +97,13 @@ Phrase de passe ──PBKDF2 (310 000 itérations)──> clé AES-GCM
 
 La phrase de passe n'est stockée **nulle part** — ni en clair, ni hachée. Il n'existe aucun serveur d'identité à compromettre, et le déverrouillage fonctionne hors ligne.
 
-> ⚠️ **Limite assumée.** Il s'agit d'un contrôle d'accès *par chiffrement*, pas d'une authentification arbitrée par un serveur. Quelqu'un qui détient l'appareil peut tenter une attaque hors ligne — d'où le coût délibéré de la dérivation. De même, une chaîne de hachage conservée sur le seul appareil ne protège pas contre son propriétaire : c'est le transfert vers un tiers qui fige la preuve.
+> ⚠️ **Limites assumées.**
+>
+> - Il s'agit d'un contrôle d'accès *par chiffrement*, pas d'une authentification arbitrée par un serveur. Quelqu'un qui détient l'appareil du gestionnaire peut tenter une attaque hors ligne — d'où le coût délibéré de la dérivation.
+> - Une chaîne de hachage conservée sur le seul appareil ne protège pas contre son propriétaire : c'est le transfert vers un tiers qui fige la preuve.
+> - **La vérification d'un lot établit sa cohérence interne, pas l'identité de son auteur.** Les signatures sont contrôlées avec la clé publique contenue dans le fichier ; c'est à l'auditeur de comparer l'empreinte `AGS-XXXXXX` affichée à celle que le capteur lui a communiquée par un autre canal. L'interface l'énonce explicitement plutôt que d'afficher un « authentique » trompeur.
+> - **L'horodatage vient de l'horloge de l'appareil.** Il n'est arbitré par personne : qui contrôle le capteur peut antidater. Seul l'ordre des maillons est cryptographiquement contraint.
+> - La dérivation ECDH alimente directement AES-GCM, comme le fait Web Crypto. Un ECIES canonique interposerait un HKDF ; ce n'est pas exploitable ici, mais c'est un écart assumé au profit du « zéro dépendance ».
 
 ---
 
@@ -157,6 +169,7 @@ AgroSentinel-AI/
 │   │
 │   ├── views/
 │   │   ├── diagnostic.js        # Parcours guidé + capture caméra
+│   │   ├── security.js          # Journal & appairage (côté capteur)
 │   │   └── dashboard.js         # Console gestionnaire
 │   │
 │   └── utils/
@@ -207,12 +220,18 @@ Incrémenter `VERSION` dans [`sw.js`](sw.js). C'est cette valeur qui invalide le
 
 ## 🎬 Démonstration
 
-1. **Vue capteur** → *Démarrer Caméra* (ou *Mode Démo*) → les détections alimentent le journal
-2. **Diagnostic** → culture → caméra → symptôme → fiche de traitement
-3. **Console gestionnaire** → phrase de passe → journal, badges **✓ Vérifié**, bandeau *Chaîne intègre*
-4. **« Falsifier un événement »** → bandeau rouge, contenu illisible, maillons suivants invalidés
+> L'ordre compte. Le capteur ne peut chiffrer que vers un destinataire connu : **créez l'accès gestionnaire d'abord.** Les événements produits avant sont conservés dans une file persistante (IndexedDB) et écrits dès qu'un destinataire existe — mais la console reste vide jusque-là, et le badge *Journal* de la vue capteur l'indique.
 
-Le quatrième temps est le plus important : la sécurité n'est pas affirmée, **elle est mise à l'épreuve en direct**.
+1. **Console gestionnaire** → phrase de passe → l'accès est créé
+2. *(deux appareils)* copier la clé publique de la console → la coller dans **Vue capteur → Journal sécurisé & destinataire** → comparer l'empreinte `MGR-XXXXXX` de vive voix
+3. **Vue capteur** → *Démarrer Caméra* (ou *Mode Démo*) → le badge *Journal* s'incrémente à chaque détection
+4. **Diagnostic** → culture → caméra → symptôme → fiche de traitement
+5. **Console gestionnaire** → journal, badges **✓ Vérifié**, bandeau *Chaîne intègre*
+6. **« Falsifier un événement »** → bandeau rouge, contenu illisible, maillons suivants invalidés
+
+Le sixième temps est le plus important : la sécurité n'est pas affirmée, **elle est mise à l'épreuve en direct**.
+
+Si la démonstration se fait sur deux appareils, la console du gestionnaire déchiffre ce qu'elle reçoit et le capteur, lui, affiche *« Chiffré pour un autre gestionnaire »* sur son propre matériel : la séparation des rôles devient visible plutôt que revendiquée.
 
 ---
 

@@ -12,7 +12,7 @@
 import {
   ensureSensorIdentity, isManagerConfigured, setupManager, unlockManager,
   listEvents, verifyChain, decryptEvent, exportBundle, verifyBundle,
-  tamperWithEvent,
+  tamperWithEvent, getManagerIdentity,
 } from '../security/journal.js';
 import { importSignaturePublicKey, isCryptoAvailable } from '../security/crypto.js';
 import { registerServiceWorker } from '../utils/pwa.js';
@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-export").addEventListener("click", onExport);
   document.getElementById("btn-tamper").addEventListener("click", onTamper);
   document.getElementById("bundle-input").addEventListener("change", onAuditBundle);
+  document.getElementById("btn-copy-key").addEventListener("click", onCopyPublicKey);
 });
 
 // ─── Écran d'accès ───────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ function hideAuthError() {
 
 // ─── Console ─────────────────────────────────────────────────────────────────
 
-function openConsole() {
+async function openConsole() {
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("console-screen").classList.remove("hidden");
 
@@ -132,7 +133,41 @@ function openConsole() {
   document.getElementById("session-text").textContent = "Session déverrouillée";
   document.getElementById("session-badge").classList.add("offline-ready");
 
+  await showPairingKey();
   refreshConsole();
+}
+
+// ─── Appairage : publication de la clé publique ──────────────────────────────
+
+/**
+ * La clé PUBLIQUE seule est affichée. Elle ne permet que de chiffrer VERS
+ * cette console : la diffuser est sans risque, c'est même le principe.
+ */
+async function showPairingKey() {
+  const identity = await getManagerIdentity();
+  if (!identity) return;
+
+  document.getElementById("manager-pubkey").value = identity.publicKeyB64;
+  document.getElementById("manager-fingerprint").textContent = identity.fingerprint;
+}
+
+async function onCopyPublicKey() {
+  const field = document.getElementById("manager-pubkey");
+  const button = document.getElementById("btn-copy-key");
+
+  try {
+    await navigator.clipboard.writeText(field.value);
+  } catch {
+    // Le presse-papiers est refusé hors contexte sécurisé (et sur certains
+    // navigateurs mobiles) : la sélection manuelle reste possible.
+    field.select();
+    return;
+  }
+
+  button.innerHTML = `<i class="fa-solid fa-check"></i> Clé copiée`;
+  setTimeout(() => {
+    button.innerHTML = `<i class="fa-solid fa-copy"></i> Copier la clé publique`;
+  }, 2000);
 }
 
 async function refreshConsole() {
@@ -221,9 +256,13 @@ function buildEventRow(event, verdict, payload) {
   let icon;
 
   if (!payload) {
-    // Charge illisible : altérée, ou chiffrée pour un autre gestionnaire.
-    summary = "Contenu illisible — déchiffrement impossible";
+    // Deux causes distinctes, à ne pas confondre : un maillon altéré est une
+    // attaque, un maillon chiffré vers un autre gestionnaire est le
+    // fonctionnement normal après un appairage.
     icon = "fa-solid fa-lock";
+    summary = verdict.ok
+      ? "Chiffré pour un autre gestionnaire — cette console n'a pas la clé"
+      : "Contenu illisible — l'événement a été altéré";
   } else if (payload.kind === "diagnostic") {
     icon = "fa-solid fa-leaf";
     summary = `Diagnostic ${payload.cropLabel} — ${payload.diseaseName}`;
@@ -296,18 +335,32 @@ async function onAuditBundle(event) {
 
   try {
     const bundle = JSON.parse(await file.text());
-    const { bundleIntact, results } = await verifyBundle(bundle);
+    const {
+      bundleIntact, results, derivedSensorId, claimedSensorId, sensorIdMatches,
+    } = await verifyBundle(bundle);
     const broken = results.filter(r => !r.ok);
 
-    if (bundleIntact && broken.length === 0) {
-      showAudit("ok", "Lot authentique et intègre",
-        `${results.length} événement(s) du capteur ${bundle.sensorId} : signatures valides, chaînage continu.`);
+    if (!sensorIdMatches) {
+      // L'identifiant affiché ne correspond pas à la clé qui a signé :
+      // incohérence grossière, le fichier a été bricolé à la main.
+      showAudit("error", "Identifiant de capteur incohérent",
+        `Le lot se présente comme « ${claimedSensorId} » alors que sa clé de signature `
+        + `correspond à « ${derivedSensorId} ». Ce fichier a été modifié.`);
     } else if (!bundleIntact) {
       showAudit("error", "Signature du lot invalide",
-        "Ce fichier n'a pas été produit par le capteur qu'il revendique, ou il a été modifié.");
-    } else {
+        `Le contenu ne correspond pas à la signature qui l'accompagne : le fichier a été `
+        + `modifié après sa production par ${derivedSensorId}.`);
+    } else if (broken.length) {
       showAudit("warn", `${broken.length} événement(s) compromis`,
         `Première anomalie au n°${broken[0].seq} : ${broken[0].problems.join(", ")}.`);
+    } else {
+      // Formulation volontairement précise : la vérification établit la
+      // cohérence interne du lot, pas l'identité de son auteur. Sans
+      // autorité de certification, seul l'auditeur peut faire ce lien.
+      showAudit("ok", `Lot cohérent — capteur ${derivedSensorId}`,
+        `${results.length} événement(s) : signatures valides, chaînage continu, séquence complète. `
+        + `Vérifiez que ${derivedSensorId} est bien l'identifiant que ce capteur vous a communiqué : `
+        + `la signature prouve l'intégrité du lot, pas l'identité de son auteur.`);
     }
   } catch (err) {
     showAudit("error", "Fichier illisible", "Ce n'est pas un lot AgroSentinel valide.");
