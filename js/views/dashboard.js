@@ -15,12 +15,15 @@ import {
   tamperWithEvent,
 } from '../security/journal.js';
 import { importSignaturePublicKey, isCryptoAvailable } from '../security/crypto.js';
+import { registerServiceWorker } from '../utils/pwa.js';
 
 let sensorRecord = null;
 let managerPrivateKey = null;
 let sensorPublicKey = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
+  registerServiceWorker();
+
   if (!isCryptoAvailable()) {
     showAuthError("Web Crypto indisponible : la page doit être servie en HTTPS ou depuis localhost.");
     document.getElementById("btn-auth").disabled = true;

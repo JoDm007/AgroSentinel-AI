@@ -18,6 +18,7 @@ import {
 import { loadLeafClassifierModel } from './models/leafClassifier.js';
 import { playScareSound, primeAudioEngine } from './utils/audioSynth.js';
 import { addLogItem, resetFps } from './utils/telemetry.js';
+import { registerServiceWorker } from './utils/pwa.js';
 import { initDiagnosticView, stopLeafCamera } from './views/diagnostic.js';
 
 // La caméra et le mode démo sont mutuellement exclusifs : deux drapeaux
@@ -40,7 +41,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initDiagnosticView();
   syncSurveillanceUI();
 
-  registerServiceWorker();
+  registerServiceWorker().then(ok => {
+    if (!ok) setOfflineStatus("unavailable", "Non supporté");
+  });
   bootstrapModels();
 });
 
@@ -48,20 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 /** Doit rester aligné sur RUNTIME_CACHE dans sw.js. */
 const RUNTIME_CACHE = "agrosentinel-v1-runtime";
-
-async function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
-    setOfflineStatus("unavailable", "Non supporté");
-    return;
-  }
-
-  try {
-    await navigator.serviceWorker.register("./sw.js", { scope: "./" });
-  } catch (err) {
-    console.warn("Service worker non enregistré :", err);
-    setOfflineStatus("unavailable", "Indisponible");
-  }
-}
 
 /**
  * Met explicitement en cache les poids des modèles.

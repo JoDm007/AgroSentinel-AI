@@ -12,7 +12,10 @@
  *   - Tout le reste en même origine : cache-first, réseau en secours.
  */
 
-const VERSION = 'agrosentinel-v1';
+// ⚠️ À INCRÉMENTER À CHAQUE DÉPLOIEMENT : c'est cette valeur qui
+// invalide les caches précédents. Sans cela, un appareil déjà visité
+// continue de servir l'ancienne version depuis son cache.
+const VERSION = 'agrosentinel-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -33,6 +36,7 @@ const SHELL_ASSETS = [
   './js/security/journal.js',
   './js/utils/audioSynth.js',
   './js/utils/telemetry.js',
+  './js/utils/pwa.js',
   './vendor/tf.min.js',
   './vendor/coco-ssd.min.js',
   './vendor/fonts/fonts.css',
