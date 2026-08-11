@@ -62,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
  * poids préchauffés à chaque redéploiement, et les stockerait en double
  * (une fois par la page, une fois par le service worker).
  */
-const SW_VERSION = "agrosentinel-v3";
+const SW_VERSION = "agrosentinel-v4";
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 
 /**
@@ -125,13 +125,25 @@ async function warmOfflineCache() {
     let cached = 0;
     for (const url of urls) {
       if (await cache.match(url)) { cached++; continue; }
+
       try {
         const response = await fetch(url);
-        if (response.ok) {
-          await cache.put(url, response);
-          cached++;
-        }
-      } catch { /* fichier manquant : ignoré, le compte le reflètera */ }
+        if (response.ok) await cache.put(url, response);
+      } catch {
+        /*
+         * Écriture ignorée volontairement. Depuis que la page et le service
+         * worker partagent le même cache, tous deux écrivent la même clé :
+         * la requête de la page est relayée par le service worker, qui met
+         * lui aussi la réponse en cache. Deux `put` concurrents sur une même
+         * clé font échouer l'un des deux ("Entry already exists") alors que
+         * l'entrée est bien présente.
+         */
+      }
+
+      // On compte donc sur l'état RÉEL du cache, pas sur le succès de notre
+      // propre écriture : peu importe qui a gagné la course, seule compte la
+      // disponibilité du fichier hors ligne.
+      if (await cache.match(url)) cached++;
     }
 
     if (cached === urls.length) {

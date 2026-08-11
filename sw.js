@@ -15,7 +15,7 @@
 // ⚠️ À INCRÉMENTER À CHAQUE DÉPLOIEMENT : c'est cette valeur qui
 // invalide les caches précédents. Sans cela, un appareil déjà visité
 // continue de servir l'ancienne version depuis son cache.
-const VERSION = 'agrosentinel-v3';
+const VERSION = 'agrosentinel-v4';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
