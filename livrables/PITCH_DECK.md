@@ -116,9 +116,15 @@ ECDSA P-256, clé NON exportable        ECDH P-256, clé emballée par
 
 ## Diapo 10 — Modèle de déploiement
 
-1. **Aujourd'hui** : hébergement statique gratuit (GitHub Pages) → « Ajouter à l'écran d'accueil » → l'application fonctionne hors ligne pour toujours. **Coût d'infrastructure : 0 FCFA.**
-2. **Demain** : diffusion par les coopératives — une console par coopérative, des capteurs appairés chez les membres ; les lots de preuves circulent par fichier, clé USB ou réseau opportuniste.
-3. **Après-demain** : pilote sur une campagne agricole avec une coopérative et les structures d'encadrement (ICAT), classifieur phytosanitaire dédié, horodatage contresigné par un tiers.
+### Une visite en ligne, une vie hors ligne. Coût d'infrastructure : **0 FCFA.**
+
+| Phase | Comment | Qui paie quoi |
+|---|---|---|
+| **Aujourd'hui** | Hébergement statique (GitHub Pages) → « Ajouter à l'écran d'accueil » → autonome à vie (~25 Mo téléchargés **une seule fois**) | Rien — aucun serveur, aucun abonnement |
+| **Pilote (1 campagne)** | 1 coopérative = 1 console gestionnaire ; les smartphones des membres deviennent les capteurs, appairés lors d'une séance de formation d'une demi-journée | Coopérative : 1 ordinateur ou tablette qu'elle possède déjà |
+| **Échelle** | Diffusion par les structures d'encadrement agricole (ICAT) ; les lots de preuves (~580 octets/événement) circulent par fichier, clé USB ou réseau opportuniste | Modèle : gratuit pour l'agriculteur ; service de vérification d'intégrité facturable aux assureurs et certificateurs |
+
+> *Pas de flotte de serveurs à financer, pas de SIM à recharger, pas de compte à administrer : le coût marginal d'un agriculteur supplémentaire est **zéro**. La seule exigence réseau de toute la vie de l'application est la première visite.*
 
 ---
 

@@ -80,7 +80,17 @@ Deux applications complémentaires dans un seul dépôt, sans aucun composant se
 
 **Honnêteté technique assumée** — MobileNet (ImageNet-1000) ne contient aucune classe manioc, tomate, mil ou sorgho : il ne peut pas diagnostiquer une culture vivrière togolaise. Nous l'utilisons uniquement pour le contrôle de cadrage de la photo ; le diagnostic repose sur un parcours guidé confirmé par l'agriculteur, adossé à la base agronomique. Afficher un faux score de confiance aurait été plus impressionnant — et trompeur.
 
-## 6. Perspectives d'évolution
+## 6. Modèle de déploiement
+
+Le choix « zéro serveur » n'est pas qu'une posture de sécurité : c'est aussi un modèle de déploiement à coût d'infrastructure nul.
+
+- **Distribution** : l'application est un site statique (PWA) hébergé gratuitement (GitHub Pages). Une seule visite en ligne — ~25 Mo, modèles IA compris — suffit ; « Ajouter à l'écran d'accueil » la rend ensuite installée et autonome à vie. Aucun store, aucune mise à jour forcée ; les mises à jour sont publiées par simple incrément de version du service worker et récupérées au prochain passage en zone couverte.
+- **Unité de déploiement : la coopérative.** Une coopérative tient la console gestionnaire (sur un ordinateur ou une tablette qu'elle possède déjà) ; les smartphones des membres deviennent les capteurs, appairés lors d'une séance de formation d'une demi-journée — l'appairage se résume à coller une clé publique et comparer une empreinte de vive voix.
+- **Circulation des preuves** : les lots d'événements (~580 octets par événement) transitent par le canal disponible — fichier, clé USB, HTTPS opportuniste — sans exigence de connectivité au champ.
+- **Contraintes assumées** : la première visite requiert une connexion et un contexte HTTPS (exigence des navigateurs pour la caméra et Web Crypto) ; la perte de la phrase de passe du gestionnaire rend le journal chiffré définitivement illisible, ce qui plaide pour une garde au niveau de la coopérative plutôt que de chaque agriculteur.
+- **Soutenabilité économique** : gratuit pour l'agriculteur — le coût marginal d'un utilisateur supplémentaire est nul. La valeur monétisable se situe en aval : service de vérification d'intégrité des historiques pour les assureurs agricoles et organismes de certification.
+
+## 7. Perspectives d'évolution
 
 1. **Classifieur phytosanitaire dédié** : transfer learning (MobileNetV2) sur le dataset *Cassava Leaf Disease* — trois classes correspondent déjà à notre base (`cmd` → Mosaïque du Manioc, `cbb` → Brûlure Bactérienne, `healthy` → Feuillage Sain).
 2. **Synchronisation opportuniste** : transmission automatique des lots chiffrés dès qu'un réseau apparaît (Background Sync), le format d'événement (~580 octets) étant déjà compatible SMS/USSD à terme.
