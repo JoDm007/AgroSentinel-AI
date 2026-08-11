@@ -5,6 +5,8 @@
 import { CONFIG } from '../config.js';
 import { playScareSound } from '../utils/audioSynth.js';
 import { addLogItem, calculateFps, incrementIntruders, incrementPests } from '../utils/telemetry.js';
+import { appendEvent } from '../security/journal.js';
+import { sha256Hex } from '../security/crypto.js';
 
 const PEST_CLASSES = ["bird", "cat", "dog", "cow", "sheep", "horse", "elephant", "bear", "zebra"];
 const IDENTITY_TRANSFORM = { scale: 1, offsetX: 0, offsetY: 0 };
@@ -19,6 +21,10 @@ let lastIntruderAlert = 0;
 let lastPestAlert = 0;
 let lastFrameStamp = 0;
 let demoAngle = 0;
+
+/** Source visuelle courante, utilisée pour l'empreinte des preuves. */
+let fingerprintSource = null;
+let inSimulation = false;
 
 export async function loadObjectDetectorModel() {
   // Poids embarqués dans le dépôt : aucun téléchargement distant, donc
@@ -45,7 +51,10 @@ export function startDetectionLoop(webcamElement, canvasElement, isDemoModeRef) 
     if (timestamp - lastFrameStamp >= minInterval) {
       lastFrameStamp = timestamp;
 
-      if (isDemoModeRef()) {
+      inSimulation = isDemoModeRef();
+      fingerprintSource = inSimulation ? canvasElement : webcamElement;
+
+      if (inSimulation) {
         runDemoLoop(canvasElement, canvasCtx);
       } else if (cocoModel && webcamElement.readyState >= 2 && webcamElement.videoWidth > 0) {
         resizeCanvas(webcamElement, canvasElement);
@@ -282,6 +291,7 @@ function handleAlertStates(hasIntruder, hasPest) {
     addLogItem("danger", "🚨 Intrus détecté dans la zone sécurisée !");
     if (autoSound) playScareSound("person");
     lastIntruderAlert = now;
+    recordThreat("intrusion", "person");
   }
 
   if (hasPest && now - lastPestAlert > CONFIG.ALERT_COOLDOWN_MS) {
@@ -289,7 +299,53 @@ function handleAlertStates(hasIntruder, hasPest) {
     addLogItem("warning", "🦅 Nuisibles détectés ! Signal effaroucheur activé.");
     if (autoSound) playScareSound("bird");
     lastPestAlert = now;
+    recordThreat("nuisible", "animal");
   }
+}
+
+/**
+ * Consigne la menace dans le journal sécurisé.
+ *
+ * L'image n'est jamais stockée ni transmise : seule son empreinte
+ * SHA-256 entre dans le journal. Elle suffira plus tard à prouver
+ * qu'une photo présentée correspond bien à cette alerte, sans que la
+ * photo ait jamais circulé.
+ */
+function recordThreat(threat, objectClass) {
+  const source = fingerprintSource;
+  const simulated = inSimulation;
+
+  (async () => {
+    try {
+      const frameHash = await fingerprintFrame(source);
+      await appendEvent({
+        kind: "surveillance",
+        threat,
+        class: objectClass,
+        frameHash,
+        // Tracé explicitement : le journal ne présente jamais une
+        // simulation comme une détection réelle.
+        mode: simulated ? "simulation" : "camera",
+      });
+    } catch (err) {
+      console.warn("Journalisation de l'alerte impossible :", err);
+    }
+  })();
+}
+
+async function fingerprintFrame(source) {
+  if (!source) return null;
+
+  const width = source.videoWidth || source.width;
+  const height = source.videoHeight || source.height;
+  if (!width || !height) return null;
+
+  const frame = document.createElement("canvas");
+  frame.width = width;
+  frame.height = height;
+  frame.getContext("2d").drawImage(source, 0, 0, width, height);
+
+  return "sha256:" + (await sha256Hex(frame.toDataURL("image/jpeg", 0.8)));
 }
 
 function resizeCanvas(webcamElement, canvasElement) {

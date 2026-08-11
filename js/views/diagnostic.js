@@ -15,6 +15,8 @@
 import { CROPS, getDiseasesForCrop, DISEASE_DATABASE } from '../config.js';
 import { checkImageQuality, isClassifierReady } from '../models/leafClassifier.js';
 import { addLogItem } from '../utils/telemetry.js';
+import { appendEvent } from '../security/journal.js';
+import { sha256Hex } from '../security/crypto.js';
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, none: 3 };
 
@@ -27,6 +29,9 @@ let selectedDiseaseKey = null;
 let leafStream = null;
 let scanTimer = null;
 let lastScanWasPlant = false;
+
+/** Empreinte de la dernière photo analysée (l'image elle-même ne sort pas). */
+let lastCaptureHash = null;
 
 export function initDiagnosticView() {
   buildCropSelector();
@@ -273,6 +278,9 @@ async function displayCapture(src) {
   result.classList.remove("hidden");
   document.getElementById("drop-zone-prompt")?.classList.add("hidden");
 
+  // Empreinte de la photo : elle seule entrera dans le journal sécurisé.
+  lastCaptureHash = "sha256:" + (await sha256Hex(src));
+
   try {
     await img.decode();
     await runQualityCheck(img);
@@ -400,6 +408,19 @@ function selectDisease(diseaseKey) {
   updateStepBadge();
   addLogItem(disease.severityLevel === "none" ? "info" : "warning",
     `Diagnostic retenu : ${disease.name}.`);
+
+  // Consigné dans le journal sécurisé : signé, chaîné et chiffré vers le
+  // gestionnaire. Sert de preuve horodatée auprès d'un technicien agricole.
+  appendEvent({
+    kind: "diagnostic",
+    crop: selectedCropKey,
+    cropLabel: selectedCropKey ? CROPS[selectedCropKey].label : disease.crop,
+    disease: diseaseKey,
+    diseaseName: disease.name,
+    severity: disease.severityLevel,
+    imageHash: lastCaptureHash,
+    method: "parcours-guide",
+  }).catch(err => console.warn("Journalisation du diagnostic impossible :", err));
 
   document.getElementById("diagnostic-result")?.scrollIntoView({
     behavior: "smooth", block: "nearest",

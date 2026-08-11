@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AgroSentinel AI — Tableau de bord Gestionnaire</title>
+  <meta name="description" content="Console de supervision sécurisée : journal d'événements signé, chaîné et chiffré, vérifiable hors ligne.">
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#090d16">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <link rel="stylesheet" href="vendor/fonts/fonts.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="navbar">
+    <div class="brand">
+      <div class="logo-icon"><i class="fa-solid fa-shield-halved"></i></div>
+      <div class="brand-text">
+        <h1>AGROSENTINEL <span class="accent-text">CONSOLE</span></h1>
+        <span class="tagline">Tableau de bord Gestionnaire • Journal sécurisé</span>
+      </div>
+    </div>
+
+    <div class="system-status">
+      <div class="status-badge" id="sensor-badge">
+        <i class="fa-solid fa-microchip"></i>
+        <span class="status-label">Capteur : <strong id="sensor-id">…</strong></span>
+      </div>
+      <div class="status-badge" id="session-badge">
+        <i class="fa-solid fa-lock" id="session-icon"></i>
+        <span class="status-label"><strong id="session-text">Verrouillé</strong></span>
+      </div>
+      <a class="btn btn-sm btn-outline" href="index.html">
+        <i class="fa-solid fa-video"></i> Vue capteur
+      </a>
+    </div>
+  </header>
+
+  <main class="dashboard-container">
+
+    <!-- ÉCRAN D'ACCÈS -->
+    <section id="auth-screen" class="auth-screen">
+      <div class="panel auth-panel">
+        <div class="auth-icon"><i class="fa-solid fa-user-shield"></i></div>
+
+        <h2 id="auth-title">Accès gestionnaire</h2>
+        <p class="auth-lead" id="auth-lead">Saisissez votre phrase de passe pour déchiffrer le journal.</p>
+
+        <form id="auth-form" autocomplete="off">
+          <label class="field">
+            <span>Phrase de passe</span>
+            <input type="password" id="passphrase" autocomplete="current-password"
+                   placeholder="au moins 8 caractères" required minlength="8">
+          </label>
+
+          <label class="field hidden" id="confirm-field">
+            <span>Confirmez la phrase de passe</span>
+            <input type="password" id="passphrase-confirm" autocomplete="new-password"
+                   placeholder="ressaisissez la même phrase">
+          </label>
+
+          <div class="auth-error hidden" id="auth-error">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span id="auth-error-text"></span>
+          </div>
+
+          <button class="btn btn-primary btn-block" id="btn-auth" type="submit">
+            <i class="fa-solid fa-unlock"></i> <span id="btn-auth-label">Déverrouiller</span>
+          </button>
+        </form>
+
+        <div class="auth-note">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>
+            La phrase de passe n'est stockée <strong>nulle part</strong> — ni en clair, ni hachée.
+            Elle dérive (PBKDF2, 310 000 itérations) la clé qui déchiffre la clé privée du
+            gestionnaire. Aucun serveur n'intervient : le déverrouillage fonctionne hors ligne.
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONSOLE -->
+    <section id="console-screen" class="hidden">
+
+      <div class="metrics-row metrics-4">
+        <div class="metric-card">
+          <div class="metric-icon blue"><i class="fa-solid fa-list-check"></i></div>
+          <div class="metric-info">
+            <span class="metric-value" id="stat-total">0</span>
+            <span class="metric-label">Événements</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon red"><i class="fa-solid fa-user-shield"></i></div>
+          <div class="metric-info">
+            <span class="metric-value" id="stat-intrusions">0</span>
+            <span class="metric-label">Intrusions</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon yellow"><i class="fa-solid fa-crow"></i></div>
+          <div class="metric-info">
+            <span class="metric-value" id="stat-pests">0</span>
+            <span class="metric-label">Nuisibles</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon green"><i class="fa-solid fa-leaf"></i></div>
+          <div class="metric-info">
+            <span class="metric-value" id="stat-diagnostics">0</span>
+            <span class="metric-label">Diagnostics</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Intégrité de la chaîne -->
+      <div class="panel integrity-panel" id="integrity-panel">
+        <div class="integrity-main">
+          <i class="fa-solid fa-shield-halved" id="integrity-icon"></i>
+          <div>
+            <strong id="integrity-title">Vérification en cours…</strong>
+            <span id="integrity-detail">Contrôle des signatures et du chaînage.</span>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline" id="btn-verify" type="button">
+          <i class="fa-solid fa-rotate"></i> Revérifier
+        </button>
+      </div>
+
+      <div class="grid-layout-2col console-grid">
+
+        <!-- Journal -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-file-shield"></i> Journal sécurisé</h3>
+            <span class="badge badge-pulse-green" id="chain-badge">chaîne —</span>
+          </div>
+
+          <div class="event-list" id="event-list">
+            <p class="symptom-placeholder">Aucun événement enregistré pour le moment.</p>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-share-nodes"></i> Transmission &amp; audit</h3>
+          </div>
+
+          <div class="diag-step">
+            <div class="step-title"><span class="step-num"><i class="fa-solid fa-file-export"></i></span> Transmettre à un tiers</div>
+            <p class="console-help">
+              Produit un lot <strong>signé</strong> transférable par fichier — donc sans réseau.
+              La coopérative ou l'assureur vérifie l'origine et l'intégrité avec la clé publique
+              incluse, sans jamais vous recontacter.
+            </p>
+            <button class="btn btn-primary btn-block" id="btn-export" type="button">
+              <i class="fa-solid fa-download"></i> Exporter le lot signé
+            </button>
+          </div>
+
+          <div class="diag-step">
+            <div class="step-title"><span class="step-num"><i class="fa-solid fa-file-import"></i></span> Auditer un lot reçu</div>
+            <p class="console-help">
+              Vérifie un journal provenant d'un autre capteur : signature, chaînage et
+              séquence. Aucune clé privée n'est nécessaire pour auditer.
+            </p>
+            <label class="btn btn-outline btn-block" for="bundle-input">
+              <i class="fa-solid fa-folder-open"></i> Choisir un fichier de lot
+            </label>
+            <input type="file" id="bundle-input" accept="application/json,.json" class="hidden-input">
+            <div class="quality-check hidden" id="audit-result">
+              <i id="audit-icon" class="fa-solid fa-circle-check"></i>
+              <div class="quality-text">
+                <strong id="audit-title"></strong>
+                <span id="audit-detail"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="diag-step danger-zone">
+            <div class="step-title"><span class="step-num danger"><i class="fa-solid fa-bug"></i></span> Démonstration d'attaque</div>
+            <p class="console-help">
+              Altère volontairement un événement stocké, <strong>sans recalculer sa signature</strong> —
+              exactement ce que peut faire un attaquant qui n'a pas la clé privée du capteur.
+              La détection doit être immédiate.
+            </p>
+            <button class="btn btn-danger btn-block" id="btn-tamper" type="button">
+              <i class="fa-solid fa-user-secret"></i> Falsifier un événement
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <p>AgroSentinel Console — Journal signé ECDSA P-256, chaîné SHA-256, chiffré AES-GCM via ECDH. Web Crypto natif, aucun serveur.</p>
+  </footer>
+
+  <script type="module" src="js/views/dashboard.js"></script>
+</body>
+</html>
