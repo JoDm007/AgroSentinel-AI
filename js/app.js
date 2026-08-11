@@ -21,6 +21,7 @@ import { addLogItem, resetFps } from './utils/telemetry.js';
 import { registerServiceWorker } from './utils/pwa.js';
 import { initDiagnosticView, stopLeafCamera } from './views/diagnostic.js';
 import { initSecurityView } from './views/security.js';
+import { initInteractiveBackground } from './utils/background.js';
 
 // La caméra et le mode démo sont mutuellement exclusifs : deux drapeaux
 // distincts, jamais détournés l'un pour l'autre.
@@ -41,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindEventListeners();
   initDiagnosticView();
   syncSurveillanceUI();
+  initInteractiveBackground();
 
   // Indépendant du chargement des modèles : le journal doit afficher son
   // état même si TensorFlow.js échoue.
@@ -62,7 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
  * poids préchauffés à chaque redéploiement, et les stockerait en double
  * (une fois par la page, une fois par le service worker).
  */
-const SW_VERSION = "agrosentinel-v4";
+const SW_VERSION = "agrosentinel-v5";
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 
 /**

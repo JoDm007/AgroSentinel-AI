@@ -9,12 +9,23 @@ let pestCount = 0;
 let lastFrameTime = performance.now();
 let frameCount = 0;
 
+/** Icône par gravité — remplace les émojis, dont le rendu varie d'un
+ *  téléphone à l'autre alors que la fonte Font Awesome est embarquée. */
+const LOG_ICONS = {
+  info: "fa-solid fa-circle-info",
+  warning: "fa-solid fa-triangle-exclamation",
+  danger: "fa-solid fa-circle-exclamation",
+};
+
 export function addLogItem(type, message) {
   const logList = document.getElementById("log-list");
   if (!logList) return;
 
   const li = document.createElement("li");
   li.className = `log-item ${type}`;
+
+  const icon = document.createElement("i");
+  icon.className = `log-icon ${LOG_ICONS[type] ?? LOG_ICONS.info}`;
 
   const timeSpan = document.createElement("span");
   timeSpan.className = "time";
@@ -23,7 +34,7 @@ export function addLogItem(type, message) {
   const textSpan = document.createElement("span");
   textSpan.textContent = message;
 
-  li.append(timeSpan, textSpan);
+  li.append(icon, timeSpan, textSpan);
   logList.insertBefore(li, logList.firstChild);
 
   while (logList.children.length > CONFIG.MAX_LOGS) {

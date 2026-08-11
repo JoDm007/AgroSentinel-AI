@@ -15,7 +15,7 @@
 // ⚠️ À INCRÉMENTER À CHAQUE DÉPLOIEMENT : c'est cette valeur qui
 // invalide les caches précédents. Sans cela, un appareil déjà visité
 // continue de servir l'ancienne version depuis son cache.
-const VERSION = 'agrosentinel-v4';
+const VERSION = 'agrosentinel-v5';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -38,6 +38,7 @@ const SHELL_ASSETS = [
   './js/utils/audioSynth.js',
   './js/utils/telemetry.js',
   './js/utils/pwa.js',
+  './js/utils/background.js',
   './vendor/tf.min.js',
   './vendor/coco-ssd.min.js',
   './vendor/fonts/fonts.css',

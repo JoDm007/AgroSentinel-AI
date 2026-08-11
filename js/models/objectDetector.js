@@ -222,11 +222,11 @@ function renderPredictions(predictions, canvasElement, canvasCtx, transform, wit
 
     if (objectClass === "person") {
       color = "#ef4444";
-      labelText = `🚨 INTRUS: PERSONNE (${percent}%)`;
+      labelText = `INTRUS : PERSONNE (${percent}%)`;
       detectedIntruder = true;
     } else if (PEST_CLASSES.includes(objectClass)) {
       color = "#f59e0b";
-      labelText = `🦅 NUISIBLE: ${objectClass.toUpperCase()} (${percent}%)`;
+      labelText = `NUISIBLE : ${objectClass.toUpperCase()} (${percent}%)`;
       detectedPest = true;
     }
 
@@ -291,7 +291,7 @@ function handleAlertStates(hasIntruder, hasPest) {
   //    pour qu'une alerte intrus ne masque pas un nuisible simultané.
   if (hasIntruder && now - lastIntruderAlert > CONFIG.ALERT_COOLDOWN_MS) {
     incrementIntruders();
-    addLogItem("danger", "🚨 Intrus détecté dans la zone sécurisée !");
+    addLogItem("danger", "Intrus détecté dans la zone sécurisée !");
     if (autoSound) playScareSound("person");
     lastIntruderAlert = now;
     recordThreat("intrusion", "person");
@@ -299,7 +299,7 @@ function handleAlertStates(hasIntruder, hasPest) {
 
   if (hasPest && now - lastPestAlert > CONFIG.ALERT_COOLDOWN_MS) {
     incrementPests();
-    addLogItem("warning", "🦅 Nuisibles détectés ! Signal effaroucheur activé.");
+    addLogItem("warning", "Nuisibles détectés ! Signal effaroucheur activé.");
     if (autoSound) playScareSound("bird");
     lastPestAlert = now;
     recordThreat("nuisible", "animal");

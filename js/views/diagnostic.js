@@ -71,7 +71,7 @@ function buildCropSelector() {
     button.className = "crop-chip";
     button.dataset.cropKey = cropKey;
     button.innerHTML = `
-      <span class="crop-emoji">${crop.emoji}</span>
+      <i class="crop-icon ${crop.icon}"></i>
       <span class="crop-label">${crop.label}</span>
     `;
     button.addEventListener("click", () => selectCrop(cropKey));
@@ -378,8 +378,10 @@ function buildSymptomList(cropKey) {
     card.type = "button";
     card.className = "symptom-card";
     card.dataset.diseaseKey = disease.key;
+    // L'icône dit la nature du pathogène, sa couleur dit la sévérité :
+    // deux informations distinctes, deux canaux visuels distincts.
     card.innerHTML = `
-      <span class="symptom-icon">${disease.symptomIcon}</span>
+      <span class="symptom-icon ${disease.severityLevel}"><i class="${disease.symptomIcon}"></i></span>
       <span class="symptom-text">
         <span class="symptom-line">${disease.symptom}</span>
         <span class="symptom-disease">${disease.name}</span>

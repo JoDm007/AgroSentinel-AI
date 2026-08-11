@@ -19,13 +19,17 @@ export const CONFIG = {
  * Cultures supportées par la base agronomique.
  * L'agriculteur déclare sa culture : c'est plus rapide et plus fiable
  * qu'une reconnaissance automatique, et cela fonctionne sans réseau.
+ *
+ * `icon` est une classe Font Awesome (embarqué dans vendor/) : le rendu est
+ * identique sur tous les appareils, là où les émojis dépendent de la fonte
+ * système du téléphone.
  */
 export const CROPS = {
-  maize:   { label: "Maïs",      emoji: "🌽" },
-  millet:  { label: "Petit Mil", emoji: "🌾" },
-  tomato:  { label: "Tomate",    emoji: "🍅" },
-  cassava: { label: "Manioc",    emoji: "🥔" },
-  sorghum: { label: "Sorgho",    emoji: "🌿" },
+  maize:   { label: "Maïs",      icon: "fa-solid fa-wheat-awn" },
+  millet:  { label: "Petit Mil", icon: "fa-solid fa-seedling" },
+  tomato:  { label: "Tomate",    icon: "fa-solid fa-apple-whole" },
+  cassava: { label: "Manioc",    icon: "fa-solid fa-carrot" },
+  sorghum: { label: "Sorgho",    icon: "fa-solid fa-leaf" },
 };
 
 /**
@@ -63,6 +67,8 @@ export const PLANT_GATE_KEYWORDS = [
  * Base de données des maladies par culture.
  *
  * `severityLevel` alimente le code couleur de l'interface.
+ * `symptomIcon` (classe Font Awesome) évoque la nature du pathogène —
+ * virus, bactérie, champignon, spores — la couleur venant de la sévérité.
  * `symptom` est la description visuelle courte présentée à l'agriculteur.
  * `alsoAffects` liste les cultures secondaires touchées par la même maladie.
  */
@@ -75,7 +81,7 @@ export const DISEASE_DATABASE = {
     cropKey: "cassava",
     severity: "Élevée",
     severityLevel: "high",
-    symptomIcon: "🟡",
+    symptomIcon: "fa-solid fa-virus",
     symptom: "Marbrures jaunes et vertes, feuilles déformées et rabougries.",
     description: "Maladie virale transmise par les mouches blanches (Bemisia). Provoque des déformations et marbrures jaunes sur les feuilles.",
     remedy: "Traitement biologique & préventif",
@@ -91,7 +97,7 @@ export const DISEASE_DATABASE = {
     cropKey: "cassava",
     severity: "Moyenne",
     severityLevel: "medium",
-    symptomIcon: "🟤",
+    symptomIcon: "fa-solid fa-bacterium",
     symptom: "Taches anguleuses humides sous les feuilles, extrémités desséchées.",
     description: "Infection bactérienne causant des taches angulaires humides sous les feuilles et dessèchement des extrémités.",
     remedy: "Mesures de contrôle recommandées",
@@ -109,7 +115,7 @@ export const DISEASE_DATABASE = {
     cropKey: "maize",
     severity: "Élevée",
     severityLevel: "high",
-    symptomIcon: "🟨",
+    symptomIcon: "fa-solid fa-virus",
     symptom: "Fines stries jaunes continues, parallèles aux nervures.",
     description: "Virus transmis par les cicadelles. Les feuilles présentent des stries jaunes parallèles aux nervures.",
     remedy: "Actions recommandées",
@@ -125,7 +131,7 @@ export const DISEASE_DATABASE = {
     cropKey: "maize",
     severity: "Moyenne",
     severityLevel: "medium",
-    symptomIcon: "🟫",
+    symptomIcon: "fa-solid fa-disease",
     symptom: "Grandes lésions elliptiques gris-brun, aspect de feuille brûlée.",
     description: "Champignon causant de grandes lésions elliptiques grisâtres sur les feuilles, réduisant la photosynthèse.",
     remedy: "Traitement fongicide",
@@ -143,7 +149,7 @@ export const DISEASE_DATABASE = {
     cropKey: "millet",
     severity: "Élevée",
     severityLevel: "high",
-    symptomIcon: "⚪",
+    symptomIcon: "fa-solid fa-disease",
     symptom: "Blanchiment des feuilles, duvet blanc au revers, épis déformés.",
     description: "Champignon oomycète causant un blanchiment et une déformation des plants ('feuille folle'). Très destructeur.",
     remedy: "Lutte intégrée",
@@ -160,7 +166,7 @@ export const DISEASE_DATABASE = {
     alsoAffects: ["millet"],
     severity: "Moyenne",
     severityLevel: "medium",
-    symptomIcon: "⚫",
+    symptomIcon: "fa-solid fa-braille",
     symptom: "Grains remplacés par des masses de spores noires poudreuses.",
     description: "Champignon remplaçant les grains par des masses de spores noires, causant des pertes de rendement importantes.",
     remedy: "Prévention et traitement",
@@ -178,7 +184,7 @@ export const DISEASE_DATABASE = {
     cropKey: "tomato",
     severity: "Très Élevée",
     severityLevel: "critical",
-    symptomIcon: "🟠",
+    symptomIcon: "fa-solid fa-droplet",
     symptom: "Taches brunes huileuses sur feuilles, tiges et fruits.",
     description: "Oomycète dévastateur causant des taches brunes huileuses sur les feuilles, tiges et fruits, surtout en saison humide.",
     remedy: "Traitement d'urgence",
@@ -194,7 +200,7 @@ export const DISEASE_DATABASE = {
     cropKey: "tomato",
     severity: "Élevée",
     severityLevel: "high",
-    symptomIcon: "🟡",
+    symptomIcon: "fa-solid fa-virus",
     symptom: "Mosaïque jaune-vert, plants rabougris, feuilles en forme de fougère.",
     description: "Virus très contagieux causant des mosaïques jaune-vert et un rabougrissement des plants.",
     remedy: "Mesures de contrôle",
@@ -212,7 +218,7 @@ export const DISEASE_DATABASE = {
     cropKey: null,
     severity: "Aucune",
     severityLevel: "none",
-    symptomIcon: "✅",
+    symptomIcon: "fa-solid fa-circle-check",
     symptom: "Vert uniforme, aucune tache, aucune déformation.",
     description: "Le feuillage présente une coloration verte uniforme et une photosynthèse optimale sans signe de parasite.",
     remedy: "Recommandations d'entretien",

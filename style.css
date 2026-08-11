@@ -106,15 +106,6 @@
 
 body {
   background-color: var(--bg);
-  /*
-   * Deux voiles très dilués : ils donnent de la profondeur au blanc sans
-   * jamais devenir une couleur. Au-delà de ~10 % d'opacité, l'effet
-   * « clinique » se perd.
-   */
-  background-image:
-    radial-gradient(1100px 560px at 8% -12%, rgba(163, 230, 53, 0.13), transparent 62%),
-    radial-gradient(900px 480px at 104% -4%, rgba(8, 145, 178, 0.06), transparent 58%);
-  background-attachment: fixed;
   color: var(--text-main);
   font-family: var(--font-sans);
   font-weight: 400;
@@ -125,6 +116,32 @@ body {
   flex-direction: column;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+}
+
+/*
+ * Halo interactif. Deux voiles très dilués — au-delà de ~10 % d'opacité,
+ * l'effet « clinique » se perd. Le halo citron suit le pointeur via
+ * --glow-x / --glow-y (animées par js/utils/background.js), le cyan se
+ * déplace en miroir pour un léger effet de parallaxe. Sans JavaScript ou
+ * avec prefers-reduced-motion, les variables gardent leur valeur initiale :
+ * dégradé statique, aucune dépendance.
+ */
+:root {
+  --glow-x: 22%;
+  --glow-y: 12%;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1000px 640px at var(--glow-x) var(--glow-y),
+      rgba(163, 230, 53, 0.16), transparent 60%),
+    radial-gradient(820px 520px at calc(100% - var(--glow-x)) calc(100% - var(--glow-y)),
+      rgba(8, 145, 178, 0.07), transparent 58%);
 }
 
 /*
@@ -694,6 +711,11 @@ label.btn { cursor: pointer; }
 .log-item.warning { border-left-color: var(--warning);     background: var(--warning-wash); }
 .log-item.danger  { border-left-color: var(--danger);      background: var(--danger-wash); }
 
+.log-item .log-icon { margin-right: 0.45rem; }
+.log-item.info .log-icon    { color: var(--lime-ink); }
+.log-item.warning .log-icon { color: var(--warning-ink); }
+.log-item.danger .log-icon  { color: var(--danger-ink); }
+
 .log-item .time {
   color: var(--text-faint);
   margin-right: 0.5rem;
@@ -796,7 +818,12 @@ label.btn { cursor: pointer; }
   box-shadow: var(--shadow-lime);
 }
 
-.crop-emoji { font-size: 1.05rem; line-height: 1; }
+.crop-icon {
+  font-size: 0.92rem;
+  line-height: 1;
+  color: var(--lime-ink);
+}
+.crop-chip.active .crop-icon { color: var(--text-on-lime); }
 
 /* ── Étape 2 : mode de capture ── */
 
@@ -1077,7 +1104,22 @@ label.btn { cursor: pointer; }
   box-shadow: inset 3px 0 0 var(--lime-strong), var(--shadow-sm);
 }
 
-.symptom-icon { font-size: 1.2rem; flex-shrink: 0; }
+/* Pastille circulaire : l'icône dit le pathogène, sa teinte dit la sévérité. */
+.symptom-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+.symptom-icon.critical { background: var(--sev-critical-wash); color: var(--sev-critical); border-color: var(--danger-edge); }
+.symptom-icon.high     { background: var(--sev-high-wash);     color: var(--sev-high);     border-color: #fed7aa; }
+.symptom-icon.medium   { background: var(--sev-medium-wash);   color: var(--sev-medium);   border-color: #fef08a; }
+.symptom-icon.none     { background: var(--sev-none-wash);     color: var(--sev-none);     border-color: var(--lime-edge); }
 
 .symptom-text {
   display: flex;
